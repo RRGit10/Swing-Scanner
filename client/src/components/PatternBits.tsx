@@ -40,7 +40,7 @@ export function contractFor(entry: TickerEntry, p: PatternEntry): ContractPick |
   return entry.contracts.find((c) => c.contract.symbol === symbol) ?? null;
 }
 
-/** "No contract fits": the expirations tried, the most common reasons, and every reason on request. */
+/** "No contract fits": the expirations tried, the most common reasons, and every reason in a dropdown. */
 export function NoContract({ p }: { p: PatternEntry }) {
   if ('symbol' in p.contract) return null;
   const skipped = p.contract.skippedExpirations;
@@ -48,17 +48,22 @@ export function NoContract({ p }: { p: PatternEntry }) {
   const { reasons } = summarizeSkipped(skipped);
   const top = reasons.slice(0, 3).map((r) => (r.count == null ? r.reason : `${r.count} ${r.reason}`));
   return (
-    <div className="text-sm text-ink-2">
+    <div className="text-sm leading-relaxed text-ink-2">
       <p>
         <span className="font-semibold text-ink">No contract fits</span> on {skipped.map((s) => shortDate(s.expiration).replace(/^\w+ /, '')).join(', ')}.
       </p>
-      <p>Most common: {top.join(', ')}.</p>
-      <details className="mt-1">
-        <summary className="cursor-pointer text-ink-3">Every reason</summary>
-        <ul className="mt-1 space-y-0.5 text-ink-3">
+      <p className="mt-2">Most common: {top.join(', ')}.</p>
+      <details className="group mt-3">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-lg border border-card-border bg-surface px-3 py-1.5 text-ink hover:border-ink-3 [&::-webkit-details-marker]:hidden">
+          Every reason
+          <svg aria-hidden viewBox="0 0 12 12" className="size-3 transition-transform group-open:rotate-180">
+            <path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </summary>
+        <ul className="mt-2 space-y-1 text-ink-3">
           {skipped.map((s) => (
             <li key={s.expiration}>
-              {shortDate(s.expiration)}: {s.reason.replace(/^no contract passed \(|\)$/g, '')}
+              <span className="text-ink-2">{shortDate(s.expiration)}:</span> {s.reason.replace(/^no contract passed \(|\)$/g, '')}
             </li>
           ))}
         </ul>

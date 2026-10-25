@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { mapQuote } from '../finnhub/quote.js';
 import { mapEarnings } from '../finnhub/earnings.js';
+import { mapLogoUrl } from '../finnhub/profile.js';
+import profile from '../__fixtures__/finnhub-profile.json';
 import quote from '../__fixtures__/finnhub-quote.json';
 import earnings from '../__fixtures__/finnhub-earnings.json';
 
@@ -36,5 +38,17 @@ describe('mapEarnings', () => {
   it('returns [] when there is no calendar', () => {
     expect(mapEarnings({ earningsCalendar: [] })).toEqual([]);
     expect(mapEarnings({})).toEqual([]);
+  });
+});
+
+describe('mapLogoUrl (/stock/profile2)', () => {
+  it('returns the logo URL for a stock', () => {
+    expect(mapLogoUrl(profile)).toBe('https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/AAPL.png');
+  });
+
+  it('returns null for an ETF (Finnhub answers {}) or an empty logo', () => {
+    expect(mapLogoUrl({})).toBeNull();
+    expect(mapLogoUrl({ ...profile, logo: '' })).toBeNull();
+    expect(mapLogoUrl(null)).toBeNull();
   });
 });

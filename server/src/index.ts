@@ -1,10 +1,12 @@
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp, type StatusPayload } from './api/routes.js';
 import { config } from './config.js';
 import { AlpacaMarketProvider } from './market/clock.js';
-import { createAlpacaClient, createProviders } from './providers/index.js';
+import { createAlpacaClient, createProviders, downloadLogo } from './providers/index.js';
+import { LogoCache } from './logos/cache.js';
+import { etToday } from './providers/et.js';
 import { CandleCache, DailyMemo } from './scanner/cache.js';
 import { makeChart } from './scanner/chart.js';
 import { ScannerLoop } from './scanner/loop.js';
@@ -16,6 +18,7 @@ const db = new ScannerDb(dbPath);
 
 let loop: ScannerLoop | null = null;
 let chart: ReturnType<typeof makeChart> = async () => null;
+let logos: LogoCache | null = null;
 let startupError: string | null = null;
 
 try {
@@ -38,6 +41,8 @@ try {
     },
   });
   chart = makeChart(candles, db);
+  // Next to the database: server/data/logos (git-ignored); browser tests get their own folder.
+  logos = new LogoCache(join(dirname(dbPath), 'logos'), providers.company, downloadLogo, etToday);
 } catch (err) {
   // e.g. missing API keys: keep serving the API (health shows which keys are missing) with the scanner off
   startupError = (err as Error).message;
@@ -48,7 +53,12 @@ const disabledStatus = (): StatusPayload => ({
   market: 'closed', banner: null, sessionDate: null, inLiquidWindow: false, lastScanAt: null, nextScanAt: null, scannerError: startupError,
 });
 
-const app = createApp({ db, status: () => loop?.status() ?? disabledStatus(), chart: (t, tf) => chart(t, tf) });
+const app = createApp({
+  db,
+  status: () => loop?.status() ?? disabledStatus(),
+  chart: (t, tf) => chart(t, tf),
+  logo: async (t) => (logos ? logos.get(t) : null),
+});
 
 app.listen(config.port, config.host, () => {
   console.log(`API listening on http://${config.host}:${config.port}${config.readOnly ? ' (read-only)' : ''}`);

@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import type { Direction, Status } from '../api/types';
 
 const STATUS_STYLE: Record<Status, string> = {
-  'AT ENTRY': 'bg-amber text-[#1d2b3a] font-bold',
-  READY: 'bg-ink text-paper font-semibold',
-  WATCH: 'border border-ink-2 text-ink-2',
+  'AT ENTRY': 'border border-amber bg-amber text-[#15212f] font-bold',
+  READY: 'border border-accent bg-accent text-white font-semibold',
+  WATCH: 'border border-ink-2/70 text-ink',
   WAIT: 'border border-dashed border-ink-3 text-ink-3',
 };
 
@@ -17,7 +17,7 @@ const STATUS_HELP: Record<Status, string> = {
 
 export function StatusTag({ status }: { status: Status }) {
   return (
-    <span title={STATUS_HELP[status]} className={`inline-block whitespace-nowrap rounded-sm px-1.5 py-0.5 text-xs tracking-wide ${STATUS_STYLE[status]}`}>
+    <span title={STATUS_HELP[status]} className={`inline-block whitespace-nowrap rounded-md px-2 py-0.5 text-xs tracking-wide ${STATUS_STYLE[status]}`}>
       {status}
     </span>
   );

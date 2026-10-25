@@ -3,38 +3,47 @@
 /* Palette: cool paper + navy ink; teal-green long, crimson short, amber for the entry zone.
    Dark mode follows the system. */
 :root {
-  --paper: #eef1f3;
-  --surface: #f7f9fa;
-  --ink: #1d2b3a;
+  --paper: #edf1f5;
+  --surface: #ffffff;
+  --panel: #f5f8fb;
+  --card-border: #d8e0e8;
+  --ink: #15212f;
   --ink-2: #4a5a6b;
-  --ink-3: #7a8896;
-  --rule: #c9d1d8;
+  --ink-3: #788796;
+  --rule: #d8e0e8;
+  --accent: #2563eb;
+  --accent-wash: #e8effd;
   --long: #0f7b61;
-  --short: #b4233c;
+  --short: #c2334d;
   --amber: #d99a00;
   --amber-wash: #f6e3b0;
   --ema-13: #d99a00;
   --ema-48: #4f7cab;
-  --ema-55: #1d2b3a;
+  --ema-55: #15212f;
   --ema-200: #8a6fa8;
   color-scheme: light;
 }
 
+/* Dark follows the design mockup: deep navy page, slightly lifted cards, blue accent. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #13202e;
-    --surface: #182838;
-    --ink: #dce4ea;
-    --ink-2: #a3b3c2;
+    --paper: #0d1826;
+    --surface: #132131;
+    --panel: #182a3d;
+    --card-border: #24384d;
+    --ink: #e4eaf0;
+    --ink-2: #a8b6c4;
     --ink-3: #74869a;
-    --rule: #2c3b4b;
+    --rule: #24384d;
+    --accent: #4c8df6;
+    --accent-wash: #13294a;
     --long: #3fbf98;
-    --short: #f06a80;
+    --short: #f0566e;
     --amber: #f2b53a;
     --amber-wash: #4a3a12;
     --ema-13: #f2b53a;
     --ema-48: #7aa7d6;
-    --ema-55: #dce4ea;
+    --ema-55: #e4eaf0;
     --ema-200: #b59bd3;
     color-scheme: dark;
   }
@@ -44,10 +53,14 @@
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
   --color-paper: var(--paper);
   --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-card-border: var(--card-border);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
   --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-wash: var(--accent-wash);
   --color-long: var(--long);
   --color-short: var(--short);
   --color-amber: var(--amber);
@@ -62,12 +75,11 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
-/* The identity: ticker symbols in Archivo's expanded, heavy cut. */
+/* Ticker symbols: bold, regular width (as in the design mockup). */
 .ticker {
-  font-stretch: 125%;
-  font-weight: 800;
+  font-weight: 750;
   letter-spacing: -0.01em;
-  line-height: 1;
+  line-height: 1.05;
 }
 
 .condensed {
@@ -75,7 +87,7 @@ html {
 }
 
 :focus-visible {
-  outline: 2px solid var(--amber);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 2px;
 }

@@ -1,11 +1,13 @@
 import { useResource } from '../api/client';
 import type { ContractPick, PatternEntry, SignalsPayload, StatusPayload, TickerEntry } from '../api/types';
-import { DirectionMark, Badge, StatusTag } from '../components/Marks';
+import { Badge, DirectionMark, StatusTag } from '../components/Marks';
 import { PathStrip } from '../components/PathStrip';
-import { contractFor, estAtT1, NoContract, PatternBadges, tfList, triggerText } from '../components/PatternBits';
+import { estAtT1, NoContract, PatternBadges, triggerText } from '../components/PatternBits';
 import { RangeStrip } from '../components/RangeStrip';
+import { TickerLogo } from '../components/TickerLogo';
 import { OPTION_PRICE_LABEL } from '../labels';
 import { contractName, etDateTime, fixed, money, patternLabel, shortDate, signedPct } from '../lib/format';
+import { groupByContract } from '../lib/groups';
 
 export function Dashboard({ status }: { status: StatusPayload | null }) {
   const { data, error, loading } = useResource<SignalsPayload>('/api/signals', status?.lastScanAt ?? null);
@@ -22,19 +24,21 @@ export function Dashboard({ status }: { status: StatusPayload | null }) {
 
   return (
     <div>
-      <p className="mb-2 text-sm text-ink-3">
+      <p className="mb-4 text-[15px] text-ink-2">
         {active.length ? `${active.length} tickers with a setup` : 'No setups in the latest scan'}, scanned {etDateTime(data.scannedAt)} ET. Ready and at-entry first.
       </p>
-      {active.map((t) => (
-        <TickerBand key={t.ticker} entry={t} />
-      ))}
+      <div className="flex flex-col gap-4">
+        {active.map((t) => (
+          <TickerCard key={t.ticker} entry={t} />
+        ))}
+      </div>
       {quiet.length > 0 && (
-        <p className="border-b border-rule py-4 text-sm text-ink-2">
+        <p className="mt-5 text-sm text-ink-2">
           No setup right now: <span className="text-ink">{quiet.map((t) => t.ticker).join(', ')}</span>
         </p>
       )}
       {failed.map((t) => (
-        <p key={t.ticker} className="border-b border-rule py-3 text-sm text-short">
+        <p key={t.ticker} className="mt-3 text-sm text-short">
           Couldn’t scan {t.ticker}: {t.error}
         </p>
       ))}
@@ -42,30 +46,40 @@ export function Dashboard({ status }: { status: StatusPayload | null }) {
   );
 }
 
-function TickerBand({ entry }: { entry: TickerEntry }) {
+/** One card per ticker: identity column on the left, then one row per contract group (patterns + right panel). */
+function TickerCard({ entry }: { entry: TickerEntry }) {
   return (
-    <section aria-labelledby={`t-${entry.ticker}`} className="grid gap-x-10 gap-y-5 border-b border-rule py-6 md:grid-cols-[8.5rem_minmax(0,1fr)] xl:grid-cols-[8.5rem_minmax(0,1fr)_23rem]">
-      <div>
-        <a id={`t-${entry.ticker}`} href={`#/t/${entry.ticker}`} className="ticker text-[2rem] text-ink hover:text-ink-2">
-          {entry.ticker}
-        </a>
-        <div className="mt-2 text-lg">{money(entry.price)}</div>
-        <a href={`#/t/${entry.ticker}`} className="mt-1 inline-block text-sm text-ink-2 underline decoration-rule underline-offset-4 hover:decoration-ink">
-          Open chart
-        </a>
+    <section
+      aria-labelledby={`t-${entry.ticker}`}
+      className="grid overflow-hidden rounded-xl border border-card-border bg-surface md:grid-cols-[10.5rem_minmax(0,1fr)]"
+    >
+      <div className="flex items-center gap-4 border-b border-card-border p-5 md:block md:border-b-0 md:border-r">
+        <TickerLogo ticker={entry.ticker} />
+        <div className="md:mt-3">
+          <a id={`t-${entry.ticker}`} href={`#/t/${entry.ticker}`} className="ticker block text-[28px] text-ink hover:text-accent">
+            {entry.ticker}
+          </a>
+          <div className="mt-1 text-lg">{money(entry.price)}</div>
+          <a href={`#/t/${entry.ticker}`} className="mt-1 inline-block text-sm text-accent hover:underline">
+            Open chart →
+          </a>
+        </div>
       </div>
-      <div className="flex min-w-0 flex-col gap-6">
-        {entry.patterns.map((p) => (
-          <PatternRow key={p.key} entry={entry} p={p} />
-        ))}
-      </div>
-      <div className="flex flex-col gap-6 md:col-start-2 xl:col-start-auto">
-        {entry.contracts.map((c) => (
-          <ContractBlock key={c.contract.symbol} pick={c} users={entry.patterns.filter((p) => 'symbol' in p.contract && p.contract.symbol === c.contract.symbol)} />
-        ))}
-        {entry.patterns.filter((p) => !('symbol' in p.contract)).slice(0, 1).map((p) => (
-          <div key={p.key} className="border-l-2 border-rule pl-4">
-            <NoContract p={p} />
+      <div className="divide-y divide-card-border">
+        {groupByContract(entry.patterns).map((g) => (
+          <div key={g.symbol ?? 'none'} className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
+            <div className="flex min-w-0 flex-col gap-7">
+              {g.patterns.map((p) => (
+                <PatternBlock key={p.key} entry={entry} p={p} />
+              ))}
+            </div>
+            <aside className="self-start rounded-lg border border-card-border bg-panel p-4" aria-label={g.symbol ? `Contract ${contractName(g.symbol)}` : 'No contract fits'}>
+              {g.symbol ? (
+                <ContractPanel pick={entry.contracts.find((c) => c.contract.symbol === g.symbol)!} users={g.patterns} />
+              ) : (
+                <NoContract p={g.patterns[0]!} />
+              )}
+            </aside>
           </div>
         ))}
       </div>
@@ -73,49 +87,44 @@ function TickerBand({ entry }: { entry: TickerEntry }) {
   );
 }
 
-function PatternRow({ entry, p }: { entry: TickerEntry; p: PatternEntry }) {
-  const pick = contractFor(entry, p);
+function PatternBlock({ entry, p }: { entry: TickerEntry; p: PatternEntry }) {
+  const hasContract = 'symbol' in p.contract;
   return (
     <article className="min-w-0">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <DirectionMark direction={p.direction} />
         <h3 className="text-[17px] font-semibold">{patternLabel(p.type)}</h3>
-        <span className="text-sm text-ink-2">{tfList(p)}</span>
+        <span className="text-sm text-ink-2">{p.timeframes[0]}{p.timeframes.length > 1 ? ` (also ${p.timeframes.slice(1).join(', ')})` : ''}</span>
         <StatusTag status={p.status} />
-        <span className="text-sm text-ink-2">{triggerText(p)}</span>
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <p className="mt-1 text-sm text-ink-2">{triggerText(p)}</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5 empty:hidden">
         <PatternBadges p={p} />
       </div>
-      <div className="mt-2 max-w-3xl">
+      <div className="mt-3">
         <PathStrip direction={p.direction} price={entry.price} triggerLevel={p.triggerLevel} invalidation={p.invalidation} targets={p.targets} />
       </div>
-      <p className="mt-1 text-sm text-ink-2">
+      <p className="mt-2 text-sm">
         {p.targets.map((t, i) => (
           <span key={i} className="mr-4">
-            T{i + 1} {money(t.price)} <span className="text-ink-3">({t.label})</span>
+            T{i + 1} {money(t.price)} <span className="text-ink-2">({t.label})</span>
           </span>
         ))}
-        {pick && (
-          <span>
-            Est. at T1 <span className="font-semibold text-ink">{signedPct(estAtT1(p))}</span> on {contractName(pick.contract.symbol)}
-          </span>
-        )}
       </p>
-      {!pick && <p className="mt-1 text-sm text-ink-3">No contract fits this setup.</p>}
+      {!hasContract && <p className="mt-1 text-sm text-ink-2">No contract fits this setup.</p>}
     </article>
   );
 }
 
-function ContractBlock({ pick, users }: { pick: ContractPick; users: PatternEntry[] }) {
+function ContractPanel({ pick, users }: { pick: ContractPick; users: PatternEntry[] }) {
   const c = pick.contract;
   return (
-    <div className="border-l-2 border-ink pl-4">
-      <div className="flex flex-wrap items-baseline gap-x-3">
+    <div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <span className="ticker text-lg">{contractName(c.symbol)}</span>
         <span className="text-sm text-ink-2">{pick.dte} days</span>
       </div>
-      <div className="mt-1 flex flex-wrap items-baseline gap-x-4 text-sm">
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-4 text-sm">
         <span>
           Δ {fixed(c.delta, 2)} <span className="font-semibold">grade {pick.grade}</span>
         </span>
@@ -125,13 +134,22 @@ function ContractBlock({ pick, users }: { pick: ContractPick; users: PatternEntr
         <span className="text-ink-3">OI {c.openInterest.toLocaleString()}</span>
       </div>
       <p className="text-xs text-ink-3">{OPTION_PRICE_LABEL}</p>
-      <RangeStrip pick={pick} />
+      <div className="mt-2">
+        <RangeStrip pick={pick} />
+      </div>
+      <ul className="mt-3 space-y-0.5 text-sm">
+        {users.map((u) => (
+          <li key={u.key}>
+            Est. at T1 <span className="font-semibold text-ink">{signedPct(estAtT1(u))}</span>
+            {users.length > 1 && <span className="text-ink-2"> ({patternLabel(u.type).toLowerCase()})</span>}
+          </li>
+        ))}
+      </ul>
       {pick.earningsDate && (
-        <div className="mt-2">
+        <div className="mt-3">
           <Badge tone="warn">Earnings {shortDate(pick.earningsDate)}, before expiration</Badge>
         </div>
       )}
-      {users.length > 1 && <p className="mt-2 text-sm text-ink-2">Shared by {users.map((u) => patternLabel(u.type).toLowerCase()).join(' and ')}.</p>}
     </div>
   );
 }

@@ -55,6 +55,43 @@ test('signals: grouped by ticker, AT ENTRY/READY first, option prices labeled in
   expect(await page.getByRole('img', { name: /^Price path:/ }).count()).toBe(await bands.locator('article').count());
 });
 
+const ETFS = new Set(['SPY', 'QQQ', 'IWM', 'DIA']);
+
+test('signals: each ticker card has its logo (or letter badge), Open chart, and a right panel per contract group', async ({ page }) => {
+  const errors = await open(page, '/#/');
+  const cards = page.locator('section[aria-labelledby^="t-"]');
+  test.skip((await cards.count()) === 0, 'no setups in this database');
+
+  for (const card of await cards.all()) {
+    const ticker = (await card.locator('a.ticker').textContent())!.trim();
+    const logo = card.getByTestId('logo');
+    await expect(logo).not.toHaveAttribute('data-kind', 'loading');
+    // ETFs have no logo on Finnhub: rounded letter badge with the first letter
+    if (ETFS.has(ticker)) {
+      await expect(logo).toHaveAttribute('data-kind', 'letter');
+      await expect(logo).toHaveText(ticker.charAt(0));
+    } else {
+      await expect(logo).toHaveAttribute('data-kind', 'image');
+      await expect(logo).toHaveAttribute('src', `/api/logo/${ticker}`);
+    }
+    await expect(card.getByRole('link', { name: 'Open chart →' })).toBeVisible();
+
+    const panels = card.locator('aside');
+    expect(await panels.count()).toBeGreaterThan(0);
+    for (const panel of await panels.all()) {
+      await expect(panel.getByText(/indicative \(modeled\), 15-min delayed|No contract fits/).first()).toBeVisible();
+    }
+  }
+
+  // "Every reason" opens the full list
+  const every = page.getByText('Every reason').first();
+  if (await every.count()) {
+    await every.click();
+    await expect(page.locator('details[open] li').first()).toBeVisible();
+  }
+  expect(errors).toEqual([]);
+});
+
 test('detail: chart with EMAs and the pattern, last-3 candle labels, EMA table, contract card', async ({ page }, info) => {
   await open(page, '/#/');
   const first = page.locator('section[aria-labelledby^="t-"] a.ticker').first();

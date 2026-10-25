@@ -24,6 +24,7 @@ beforeAll(async () => {
   const app = createApp({
     db,
     status: () => ({ market: 'closed', banner: 'market closed — last session', sessionDate: '2026-10-23', inLiquidWindow: false, lastScanAt: NOW, nextScanAt: null }),
+    logo: async (ticker) => (ticker === 'AAPL' ? { contentType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) } : null),
     chart: async (ticker, tf) => (ticker === 'SPY' ? { ticker, timeframe: tf, candles: [], ema: { 13: [], 48: [], 55: [], 200: [] }, patterns: [] } : null),
   });
   server = app.listen(0);
@@ -107,5 +108,31 @@ describe('settings API', () => {
     expect(history.versions.map((v: { version: number; note: string | null }) => [v.version, v.note])).toEqual([
       [3, 'reset to defaults'], [2, null], [1, 'defaults'],
     ]);
+  });
+});
+
+describe('GET /api/logo/:ticker', () => {
+  it('serves a cached logo for a watchlist ticker with a 1-day cache header', async () => {
+    const res = await fetch(base + '/api/logo/aapl');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  });
+
+  it('404 when the ticker has no logo (ETF), or is not on the watchlist; 400 when malformed', async () => {
+    expect((await fetch(base + '/api/logo/SPY')).status).toBe(404);
+    expect((await fetch(base + '/api/logo/ZZZZ')).status).toBe(404);
+    expect((await fetch(base + '/api/logo/' + encodeURIComponent('..%2Fx'))).status).toBe(400);
+  });
+});
+
+describe('GET /api/logo/:ticker/info', () => {
+  it('always answers 200 with hasLogo, so the browser only requests images that exist', async () => {
+    expect(await (await fetch(base + '/api/logo/AAPL/info')).json()).toEqual({ ticker: 'AAPL', hasLogo: true });
+    expect(await (await fetch(base + '/api/logo/SPY/info')).json()).toEqual({ ticker: 'SPY', hasLogo: false });
+    const off = await fetch(base + '/api/logo/ZZZZ/info');
+    expect(off.status).toBe(200);
+    expect(await off.json()).toEqual({ ticker: 'ZZZZ', hasLogo: false });
   });
 });

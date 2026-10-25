@@ -7,6 +7,7 @@ import type { SignalStatus } from '../scanner/status.js';
 import { DEFAULT_APP_SETTINGS } from '../scanner/settings.js';
 import { validateSettings } from '../settings/validate.js';
 import type { ScannerDb } from '../storage/db.js';
+import type { LogoImage } from '../logos/cache.js';
 
 export interface StatusPayload {
   market: 'open' | 'closed';
@@ -32,6 +33,8 @@ export interface AppDeps {
   db: ScannerDb;
   status: () => StatusPayload;
   now?: () => number;
+  /** cached company logo, or null when there is none */
+  logo?: (ticker: string) => Promise<LogoImage | null>;
   chart: (ticker: string, tf: Timeframe) => Promise<ChartPayload | null>;
 }
 
@@ -84,6 +87,27 @@ export function createApp(deps: AppDeps): express.Express {
       res.json(chart);
     } catch (err) {
       next(err);
+    }
+  });
+
+  app.get('/api/logo/:ticker/info', async (req, res) => {
+    const ticker = req.params.ticker.toUpperCase();
+    const listed = /^[A-Z][A-Z.]{0,9}$/.test(ticker) && deps.db.currentSettings().settings.watchlist.includes(ticker);
+    const img = listed && deps.logo ? await deps.logo(ticker).catch(() => null) : null;
+    res.json({ ticker, hasLogo: img != null });
+  });
+
+  app.get('/api/logo/:ticker', async (req, res) => {
+    const ticker = req.params.ticker.toUpperCase();
+    if (!/^[A-Z][A-Z.]{0,9}$/.test(ticker)) return void res.status(400).json({ error: 'Not a ticker symbol' });
+    // Only watchlist tickers: the server never looks up arbitrary symbols for the browser.
+    if (!deps.db.currentSettings().settings.watchlist.includes(ticker)) return void res.status(404).json({ error: `${ticker} is not on the watchlist` });
+    try {
+      const img = deps.logo ? await deps.logo(ticker) : null;
+      if (!img) return void res.status(404).json({ error: `No logo for ${ticker}` });
+      res.set({ 'Content-Type': img.contentType, 'Cache-Control': 'public, max-age=86400' }).send(img.bytes);
+    } catch {
+      res.status(404).json({ error: `Logo for ${ticker} is unavailable right now` });
     }
   });
 

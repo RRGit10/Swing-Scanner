@@ -86,6 +86,11 @@ export interface QuoteProvider {
   getQuote(symbol: string): Promise<Quote>;
 }
 
+export interface CompanyProvider {
+  /** company logo image URL, or null (ETFs have none) */
+  getLogoUrl(symbol: string): Promise<string | null>;
+}
+
 export interface EarningsProvider {
   /** from/to are YYYY-MM-DD, inclusive */
   getEarnings(symbol: string, from: string, to: string): Promise<EarningsEvent[]>;
