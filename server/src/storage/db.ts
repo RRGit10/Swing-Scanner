@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3';
 import type { Outcome, SignalEvent, SignalRow } from '../history/signals.js';
+import { DEFAULT_APP_SETTINGS, type AppSettings } from '../scanner/settings.js';
+import { diffSettings, validateSettings, type SettingsChange } from '../settings/validate.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS scans (
@@ -55,7 +57,19 @@ CREATE TABLE IF NOT EXISTS signal_events (
   detail TEXT
 );
 CREATE INDEX IF NOT EXISTS signal_events_signal ON signal_events(signal_id, id);
+CREATE TABLE IF NOT EXISTS settings_versions (
+  version INTEGER PRIMARY KEY,
+  saved_at INTEGER NOT NULL,
+  settings TEXT NOT NULL,
+  changes TEXT NOT NULL,
+  note TEXT
+);
 `;
+
+/** Columns added after the first release; added to older databases on open. */
+const MIGRATIONS: [table: string, column: string, ddl: string][] = [
+  ['signals', 'settings_version', 'ALTER TABLE signals ADD COLUMN settings_version INTEGER NOT NULL DEFAULT 1'],
+];
 
 /** camelCase row field → column. JSON fields are (de)serialized; booleans stored as 0/1. */
 const COLUMNS: [keyof SignalRow, string, 'json' | 'bool' | 'plain'][] = [
@@ -68,7 +82,7 @@ const COLUMNS: [keyof SignalRow, string, 'json' | 'bool' | 'plain'][] = [
   ['expiration', 'expiration', 'plain'], ['lowestEntryAsk', 'lowest_entry_ask', 'plain'], ['lastTrackedAt', 'last_tracked_at', 'plain'],
   ['outcome', 'outcome', 'plain'], ['outcomeAt', 'outcome_at', 'plain'], ['exitBid', 'exit_bid', 'plain'], ['exitAsk', 'exit_ask', 'plain'],
   ['exitQuoteTime', 'exit_quote_time', 'plain'], ['exitNote', 'exit_note', 'plain'], ['gainPct', 'gain_pct', 'plain'],
-  ['endedAt', 'ended_at', 'plain'], ['endedReason', 'ended_reason', 'plain'],
+  ['endedAt', 'ended_at', 'plain'], ['endedReason', 'ended_reason', 'plain'], ['settingsVersion', 'settings_version', 'plain'],
 ];
 
 export interface SavedScan {
@@ -78,6 +92,15 @@ export interface SavedScan {
   sessionDate: string | null;
   payload: unknown;
   errors: string[];
+}
+
+export interface SettingsVersion {
+  version: number;
+  savedAt: number;
+  settings: AppSettings;
+  changes: SettingsChange[];
+  /** e.g. "defaults", "reset to defaults" */
+  note: string | null;
 }
 
 export interface OutcomeCounts {
@@ -112,6 +135,37 @@ export class ScannerDb {
     this.db = new Database(path);
     this.db.pragma('journal_mode = WAL');
     this.db.exec(SCHEMA);
+    for (const [table, column, ddl] of MIGRATIONS) if (!this.columnNames(table).includes(column)) this.db.exec(ddl);
+  }
+
+  columnNames(table: string): string[] {
+    return (this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  }
+
+  /** Current settings; version 1 = the CLAUDE.md defaults, created on first use. */
+  currentSettings(): SettingsVersion {
+    const latest = this.db.prepare('SELECT * FROM settings_versions ORDER BY version DESC LIMIT 1').get() as DbRow | undefined;
+    if (latest) return toSettingsVersion(latest);
+    this.db
+      .prepare('INSERT INTO settings_versions (version, saved_at, settings, changes, note) VALUES (1, ?, ?, ?, ?)')
+      .run(Math.floor(Date.now() / 1000), JSON.stringify(DEFAULT_APP_SETTINGS), '[]', 'defaults');
+    return this.currentSettings();
+  }
+
+  /** Saves a new version if anything changed (with the list of changes). */
+  saveSettings(settings: AppSettings, now: number, note: string | null = null): { version: number; changed: boolean } {
+    const current = this.currentSettings();
+    const changes = diffSettings(current.settings, settings);
+    if (!changes.length) return { version: current.version, changed: false };
+    const version = current.version + 1;
+    this.db
+      .prepare('INSERT INTO settings_versions (version, saved_at, settings, changes, note) VALUES (?, ?, ?, ?, ?)')
+      .run(version, now, JSON.stringify(settings), JSON.stringify(changes), note);
+    return { version, changed: true };
+  }
+
+  settingsVersions(): SettingsVersion[] {
+    return (this.db.prepare('SELECT * FROM settings_versions ORDER BY version DESC').all() as DbRow[]).map(toSettingsVersion);
   }
 
   close(): void {
@@ -191,10 +245,16 @@ export class ScannerDb {
     }));
   }
 
-  historySummary(): HistorySummary {
-    const countBy = (where: string) =>
+  /** All-time summary, or only signals first seen under `version`. */
+  historySummary(version?: number): HistorySummary {
+    const scope = version == null ? '' : `settings_version = ${Math.floor(version)}`;
+    const where = (...conds: string[]) => {
+      const all = [scope, ...conds].filter(Boolean);
+      return all.length ? `WHERE ${all.join(' AND ')}` : '';
+    };
+    const countBy = (w: string) =>
       Object.fromEntries(
-        (this.db.prepare(`SELECT outcome, COUNT(*) n FROM signals ${where} GROUP BY outcome`).all() as { outcome: Outcome; n: number }[]).map(
+        (this.db.prepare(`SELECT outcome, COUNT(*) n FROM signals ${w} GROUP BY outcome`).all() as { outcome: Outcome; n: number }[]).map(
           (r) => [r.outcome, r.n],
         ),
       ) as Partial<Record<Outcome, number>>;
@@ -202,11 +262,11 @@ export class ScannerDb {
       const resolved = (c.win ?? 0) + (c.loss ?? 0) + (c.expired ?? 0);
       return { resolved, wins: c.win ?? 0, losses: c.loss ?? 0, expired: c.expired ?? 0, hitRate: resolved ? (c.win ?? 0) / resolved : null };
     };
-    const all = countBy('');
+    const all = countBy(where());
     const pattern = outcomes(all);
     const gains = this.db
       .prepare(
-        "SELECT AVG(gain_pct) avg, COUNT(gain_pct) cnt FROM signals WHERE frozen_contract IS NOT NULL AND outcome IN ('win', 'loss', 'expired') AND gain_pct IS NOT NULL",
+        `SELECT AVG(gain_pct) avg, COUNT(gain_pct) cnt FROM signals ${where("frozen_contract IS NOT NULL", "outcome IN ('win', 'loss', 'expired')", 'gain_pct IS NOT NULL')}`,
       )
       .get() as { avg: number | null; cnt: number };
     return {
@@ -216,9 +276,21 @@ export class ScannerDb {
       neverTriggered: all.never_triggered ?? 0,
       noContract: all.no_contract ?? 0,
       pattern,
-      tradeable: { ...outcomes(countBy('WHERE frozen_contract IS NOT NULL')), avgGainPct: gains.cnt ? gains.avg : null, gainSamples: gains.cnt },
+      tradeable: { ...outcomes(countBy(where('frozen_contract IS NOT NULL'))), avgGainPct: gains.cnt ? gains.avg : null, gainSamples: gains.cnt },
     };
   }
+}
+
+function toSettingsVersion(r: DbRow): SettingsVersion {
+  // Fill fields added after this version was saved with today's defaults.
+  const parsed = validateSettings(JSON.parse(r.settings as string), DEFAULT_APP_SETTINGS);
+  return {
+    version: r.version as number,
+    savedAt: r.saved_at as number,
+    settings: parsed.ok ? parsed.settings : DEFAULT_APP_SETTINGS,
+    changes: JSON.parse(r.changes as string),
+    note: (r.note as string | null) ?? null,
+  };
 }
 
 function toRow(r: DbRow): SignalRow {

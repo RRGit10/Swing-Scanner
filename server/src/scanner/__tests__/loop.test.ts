@@ -8,6 +8,18 @@ import { bullFlagTriggered, candlesOf, ZIGZAG } from '../../analysis/__fixtures_
 import { opt } from '../../contracts/__fixtures__/chains.js';
 import type { MarketCalendarProvider, TradingDay } from '../../market/clock.js';
 import type { Candle, CandleProvider } from '../../providers/types.js';
+import { applyScan } from '../../history/signals.js';
+
+/** Insert an armed signal directly (as if an earlier scan had found it). */
+function applyScanForTest(db: ScannerDb, key: string, now: number): string {
+  const { row } = applyScan(null, {
+    key, ticker: 'SPY', type: 'double_top', direction: 'bearish', timeframes: ['15m'], tradingTimeframe: '15m', state: 'armed',
+    status: 'WATCH', lowerQuality: false, triggerTime: null, triggerLevel: 1, invalidation: 2,
+    targets: [{ kind: 'pattern', label: 'T', price: 0.5 }], contract: null, horizonExpiration: null, settingsVersion: 7,
+  }, now);
+  db.upsertSignal(row);
+  return key;
+}
 
 const DAYS: TradingDay[] = [
   { date: '2026-10-22', open: '09:30', close: '16:00' },
@@ -31,7 +43,7 @@ class SwitchableCandles implements CandleProvider {
   }
 }
 
-function makeLoop(db: ScannerDb, candles: SwitchableCandles, now: () => number, quoteFails = false) {
+function makeLoop(db: ScannerDb, candles: SwitchableCandles, now: () => number, quoteFails = false, watchlist = ['SPY']) {
   const call = opt({ type: 'call', strike: 105, ask: 3, delta: 0.6, gamma: 0.05, theta: -0.05 });
   const scan: ScanDeps = {
     candles: new CandleCache(candles),
@@ -43,7 +55,7 @@ function makeLoop(db: ScannerDb, candles: SwitchableCandles, now: () => number, 
     earnings: { getEarnings: async () => [] },
     memo: { expirations: new DailyMemo(), earnings: new DailyMemo() },
   };
-  return new ScannerLoop({ market, db, scan, settings: { ...DEFAULT_APP_SETTINGS, watchlist: ['SPY'] }, now, log: () => {} });
+  return new ScannerLoop({ market, db, scan, settings: () => ({ version: 7, settings: { ...DEFAULT_APP_SETTINGS, watchlist } }), now, log: () => {} });
 }
 
 describe('ScannerLoop', () => {
@@ -70,7 +82,7 @@ describe('ScannerLoop', () => {
     await loop.start({ heartbeat: false });
     expect(loop.status()).toMatchObject({ market: 'open', banner: null, inLiquidWindow: true, nextScanAt: MONDAY_10 + 120 });
     const signal = db.activeSignals().find((s) => s.type === 'bull_flag')!;
-    expect(signal).toMatchObject({ ticker: 'SPY', outcome: 'pending', frozenContract: expect.stringContaining('SPY') });
+    expect(signal).toMatchObject({ ticker: 'SPY', outcome: 'pending', frozenContract: expect.stringContaining('SPY'), settingsVersion: 7 });
   });
 
   it('a signal missing from a later scan is ended; a ticker that errors does not end its signals', async () => {
@@ -88,5 +100,18 @@ describe('ScannerLoop', () => {
     now += 120;
     await makeLoop(db, candles, () => now).scanOnce();
     expect(db.getSignal(key)).toMatchObject({ endedAt: now, endedReason: 'no longer detected', outcome: 'pending' });
+  });
+
+  it('a ticker removed from the watchlist: its armed signals end, triggered ones keep tracking', async () => {
+    const db = new ScannerDb(':memory:');
+    const candles = new SwitchableCandles(bullFlagTriggered);
+    let now = MONDAY_10;
+    await makeLoop(db, candles, () => now).start({ heartbeat: false });
+    const armed = applyScanForTest(db, 'SPY|double_top|bearish|1', now);
+    now += 120;
+    await makeLoop(db, candles, () => now, false, ['QQQ']).scanOnce();
+    expect(db.getSignal(armed)).toMatchObject({ endedReason: 'removed from watchlist', outcome: 'never_triggered' });
+    expect(db.activeSignals().map((s) => s.ticker)).not.toContain('SPY');
+    expect(db.allSignals().find((s) => s.type === 'bull_flag' && s.ticker === 'SPY')).toMatchObject({ endedReason: 'removed from watchlist', outcome: 'pending' });
   });
 });

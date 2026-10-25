@@ -17,7 +17,7 @@ beforeAll(async () => {
   });
   const { row, events } = applyScan(null, {
     key: 'k', ticker: 'SPY', type: 'double_top', direction: 'bearish', timeframes: ['15m'], tradingTimeframe: '15m', state: 'armed',
-    status: 'WATCH', lowerQuality: false, triggerTime: null, triggerLevel: 1, invalidation: 2, targets: [{ kind: 'pattern', label: 'T', price: 0.5 }], contract: null, horizonExpiration: null,
+    status: 'WATCH', lowerQuality: false, triggerTime: null, triggerLevel: 1, invalidation: 2, targets: [{ kind: 'pattern', label: 'T', price: 0.5 }], contract: null, horizonExpiration: null, settingsVersion: 1,
   }, NOW);
   db.addEvents(db.upsertSignal(row), events);
 
@@ -60,15 +60,52 @@ describe('API', () => {
     expect((await get('/api/chart/ZZZZ?tf=1h')).status).toBe(404);
   });
 
-  it('GET /api/history returns signals with events and the summary', async () => {
+  it('GET /api/history returns signals with events, and summaries for this settings version and all time', async () => {
     const { body } = await get('/api/history');
-    expect(body.summary).toMatchObject({ total: 1, triggered: 0 });
+    expect(body.currentVersion).toBe(1);
+    expect(body.summary.allTime).toMatchObject({ total: 1, triggered: 0 });
+    expect(body.summary.current).toMatchObject({ total: 1 });
+    expect(body.versions.map((v: { version: number }) => v.version)).toEqual([1]);
     expect(body.signals[0]).toMatchObject({ key: 'k', outcome: 'open' });
     expect(body.signals[0].events.map((e: { kind: string }) => e.kind)).toEqual(['first_seen']);
   });
 
-  it('only GET is exposed (no write endpoints)', async () => {
-    const res = await fetch(base + '/api/signals', { method: 'POST' });
-    expect(res.status).toBe(404);
+  it('only settings can be written; everything else is read-only', async () => {
+    expect((await fetch(base + '/api/signals', { method: 'POST' })).status).toBe(404);
+    expect((await fetch(base + '/api/history', { method: 'DELETE' })).status).toBe(404);
+  });
+});
+
+describe('settings API', () => {
+  const send = async (method: string, path: string, body?: unknown) => {
+    const res = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, body: await res.json() };
+  };
+
+  it('GET returns the current version, its settings and the defaults', async () => {
+    const { body } = await get('/api/settings');
+    expect(body).toMatchObject({ version: 1, note: 'defaults' });
+    expect(body.settings.contracts.budget).toBe(500);
+    expect(body.defaults.contracts.budget).toBe(500);
+  });
+
+  it('PUT saves a new version (applies from the next scan); invalid input returns every error', async () => {
+    const ok = await send('PUT', '/api/settings', { contracts: { budget: 750 }, watchlist: ['spy', 'qqq'] });
+    expect(ok).toMatchObject({ status: 200, body: { version: 2, changed: true } });
+    expect(ok.body.settings.watchlist).toEqual(['SPY', 'QQQ']);
+    const bad = await send('PUT', '/api/settings', { contracts: { budget: 1 }, watchlist: [] });
+    expect(bad.status).toBe(400);
+    expect(bad.body.errors).toEqual(['contracts.budget: must be between 50 and 100000', 'watchlist: add at least 1 ticker']);
+    expect((await get('/api/settings')).body.version).toBe(2);
+  });
+
+  it('POST /api/settings/reset restores the defaults as a new version', async () => {
+    const { body } = await send('POST', '/api/settings/reset');
+    expect(body).toMatchObject({ version: 3, changed: true, note: 'reset to defaults' });
+    expect(body.settings.contracts.budget).toBe(500);
+    const history = (await get('/api/history?version=all')).body;
+    expect(history.versions.map((v: { version: number; note: string | null }) => [v.version, v.note])).toEqual([
+      [3, 'reset to defaults'], [2, null], [1, 'defaults'],
+    ]);
   });
 });

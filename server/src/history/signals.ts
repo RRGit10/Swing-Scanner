@@ -30,6 +30,8 @@ export interface SignalSnapshot {
   contract: { symbol: string; ask: number | null; expiration: string } | null;
   /** nearest Friday the method would use; the stock-outcome deadline when there is no contract */
   horizonExpiration: string | null;
+  /** settings version in force for this scan */
+  settingsVersion: number;
 }
 
 export interface SignalRow {
@@ -70,6 +72,8 @@ export interface SignalRow {
   gainPct: number | null;
   endedAt: number | null;
   endedReason: string | null;
+  /** settings version in force when first seen */
+  settingsVersion: number;
 }
 
 export interface SignalEvent {
@@ -105,7 +109,7 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
       key: cur.key, ticker: cur.ticker, type: cur.type, direction: cur.direction, firstSeenAt: now, ...live,
       triggerTime: cur.triggerTime, frozenAt: null, frozenT1: null, frozenContract: null, entryAsk: null, expiration: null,
       lowestEntryAsk: null, lastTrackedAt: null, outcome: 'open', outcomeAt: null, exitBid: null, exitAsk: null,
-      exitQuoteTime: null, exitNote: null, gainPct: null, endedAt: null, endedReason: null,
+      exitQuoteTime: null, exitNote: null, gainPct: null, endedAt: null, endedReason: null, settingsVersion: cur.settingsVersion,
     };
     events.push(event('first_seen', now, null, cur.status, { contract: row.contractSymbol }));
   } else {
@@ -145,12 +149,12 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
 }
 
 /** A signal missing from a scan ends; never-triggered ones resolve as never_triggered, triggered ones keep tracking. */
-export function endMissing(row: SignalRow, now: number): { row: SignalRow; events: SignalEvent[] } {
+export function endMissing(row: SignalRow, now: number, reason = 'no longer detected'): { row: SignalRow; events: SignalEvent[] } {
   if (row.endedAt != null) return { row, events: [] };
   const ended: SignalRow = {
     ...row,
     endedAt: now,
-    endedReason: 'no longer detected',
+    endedReason: reason,
     outcome: row.outcome === 'open' ? 'never_triggered' : row.outcome,
   };
   return { row: ended, events: [event('ended', now, row.status, null, { outcome: ended.outcome })] };

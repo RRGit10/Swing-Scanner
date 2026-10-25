@@ -96,6 +96,16 @@ Do NOT substitute generic indicators (RSI, MACD, Bollinger, etc.) or invent stra
   - Missed time (server stopped / Mac slept): on restart, backfill outcomes for open triggered signals from 1-min bars between the last tracked time and now, in time order. If the exit snapshot moment was missed, record the outcome but mark the exit "exit quote missed" and leave gain % empty — never estimate it. Log each backfill in signal_events.
   - Database: server/data/scanner.db (git-ignored).
 
+## UI and settings (decided)
+- Pages: Signals (dashboard, grouped by ticker, AT ENTRY/READY first), ticker detail (chart + EMA table + contract card), History, Settings. Disclaimer on every page; market-closed banner when read-only.
+- Theme follows the system (light/dark). One typeface (Archivo); ticker symbols in its expanded heavy cut.
+- Every signal shows a to-scale price path (invalidation, now, trigger, T1/T2) and every contract a day-range strip with the bottom-25% entry zone.
+- Settings are saved server-side as numbered versions (each save lists what changed; "Reset to defaults" restores the CLAUDE.md defaults as a new version, after confirmation). The scanner reads them at the start of each scan, so changes apply from the next scan. Scanner timing and rate limits are not editable.
+- Each signal is stamped with the settings version in force when first seen; History shows both hit rates for the current version and all time.
+- A ticker removed from the watchlist: its armed signals end ("removed from watchlist"); triggered ones keep tracking their outcome.
+- Charts: lightweight-charts v5, following .agents/skills/lightweight-charts. TradingView attribution stays on (`layout.attributionLogo: true`, required by its license). Data keeps real UTC timestamps; New York time is shown through `tickMarkFormatter` / `timeFormatter`, never by shifting timestamps.
+- The API listens on 127.0.0.1 only (it has a settings write endpoint and no auth). Browser tests: `npm run test:e2e` (Playwright, a read-only API on a copy of the database; never touches server/data/scanner.db).
+
 ## Hard rules
 - NEVER place, simulate, or route real orders.
 - No auth, notifications, or AI-generated trade picks.

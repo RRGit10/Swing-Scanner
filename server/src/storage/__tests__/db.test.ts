@@ -7,7 +7,7 @@ const snap = (over: Partial<SignalSnapshot> = {}): SignalSnapshot => ({
   key: 'SPY|double_top|bearish|1', ticker: 'SPY', type: 'double_top', direction: 'bearish', timeframes: ['15m'],
   tradingTimeframe: '15m', state: 'armed', status: 'WATCH', lowerQuality: false, triggerTime: null, triggerLevel: 758.68,
   invalidation: 764.07, targets: [{ kind: 'pattern', label: 'Pattern target', price: 753.59 }],
-  contract: { symbol: 'SPY261030P00756000', ask: 4.97, expiration: '2026-10-30' }, horizonExpiration: '2026-10-30', ...over,
+  contract: { symbol: 'SPY261030P00756000', ask: 4.97, expiration: '2026-10-30' }, horizonExpiration: '2026-10-30', settingsVersion: 1, ...over,
 });
 
 describe('ScannerDb (in-memory)', () => {

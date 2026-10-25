@@ -1,5 +1,5 @@
 import type { CandleLabel } from '../analysis/candles.js';
-import type { EmaTableRow } from '../analysis/emaLevels.js';
+import type { EmaLevel, EmaTableRow } from '../analysis/emaLevels.js';
 import type { KeyPoint, PatternLine, PatternType } from '../analysis/patterns/types.js';
 import type { Target } from '../analysis/targets.js';
 import type { Direction } from '../analysis/types.js';
@@ -30,6 +30,10 @@ export interface PatternEntry {
   drawings: Partial<Record<IntradayTimeframe, { points: KeyPoint[]; lines: PatternLine[] }>>;
   /** nearest Friday ≥ minDte: the stock-outcome deadline if the trigger fires with no contract */
   horizonExpiration: string | null;
+  /** daily 13/48/55/200 EMAs between price and the final target (resistance/support in the trade's path) */
+  dailyEmasInPath: EmaLevel[];
+  /** 55 EMA reversal in the pattern's direction within the last 3 candles of the trading chart */
+  ema55Reversal: { time: number } | null;
   /** the shared contract is listed once under the ticker; each pattern keeps its own exit plan */
   contract: PatternContract;
 }

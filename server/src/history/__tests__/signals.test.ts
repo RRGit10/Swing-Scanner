@@ -19,7 +19,7 @@ function snap(over: Partial<SignalSnapshot> = {}): SignalSnapshot {
     invalidation: 764.07,
     targets: [{ kind: 'pattern', label: 'Pattern target', price: 753.59 }],
     contract: { symbol: 'SPY261030P00756000', ask: 4.97, expiration: '2026-10-30' },
-    horizonExpiration: '2026-10-30',
+    horizonExpiration: '2026-10-30', settingsVersion: 1,
     ...over,
   };
 }

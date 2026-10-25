@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createApp, type StatusPayload } from './api/routes.js';
 import { config } from './config.js';
@@ -7,12 +8,11 @@ import { createAlpacaClient, createProviders } from './providers/index.js';
 import { CandleCache, DailyMemo } from './scanner/cache.js';
 import { makeChart } from './scanner/chart.js';
 import { ScannerLoop } from './scanner/loop.js';
-import { DEFAULT_APP_SETTINGS } from './scanner/settings.js';
 import { ScannerDb } from './storage/db.js';
 
-const dataDir = fileURLToPath(new URL('../data/', import.meta.url));
-mkdirSync(dataDir, { recursive: true });
-const db = new ScannerDb(`${dataDir}scanner.db`);
+const dbPath = config.dbPath ?? fileURLToPath(new URL('../data/scanner.db', import.meta.url));
+mkdirSync(dirname(dbPath), { recursive: true });
+const db = new ScannerDb(dbPath);
 
 let loop: ScannerLoop | null = null;
 let chart: ReturnType<typeof makeChart> = async () => null;
@@ -31,7 +31,11 @@ try {
       earnings: providers.earnings,
       memo: { expirations: new DailyMemo(), earnings: new DailyMemo() },
     },
-    settings: DEFAULT_APP_SETTINGS,
+    // Read on every scan, so a saved settings version applies from the next scan.
+    settings: () => {
+      const { version, settings } = db.currentSettings();
+      return { version, settings };
+    },
   });
   chart = makeChart(candles, db);
 } catch (err) {
@@ -46,7 +50,7 @@ const disabledStatus = (): StatusPayload => ({
 
 const app = createApp({ db, status: () => loop?.status() ?? disabledStatus(), chart: (t, tf) => chart(t, tf) });
 
-app.listen(config.port, () => {
-  console.log(`API listening on http://localhost:${config.port}`);
-  loop?.start().catch((err: Error) => console.error(`[scanner] start failed: ${err.message}`));
+app.listen(config.port, config.host, () => {
+  console.log(`API listening on http://${config.host}:${config.port}${config.readOnly ? ' (read-only)' : ''}`);
+  loop?.start({ readOnly: config.readOnly }).catch((err: Error) => console.error(`[scanner] start failed: ${err.message}`));
 });

@@ -5,3 +5,7 @@ dist
 *.db-*
 .DS_Store
 server/data/
+client/e2e/.tmp/
+client/e2e/screenshots/
+client/test-results/
+client/playwright-report/

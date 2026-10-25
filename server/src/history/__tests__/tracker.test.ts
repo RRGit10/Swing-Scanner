@@ -28,7 +28,7 @@ function setup(minutes: Candle[], snapshot: Partial<OptionContract> | null, last
     tradingTimeframe: '15m', state: 'triggered', status: 'READY', lowerQuality: false, triggerTime: T0, triggerLevel: 100,
     invalidation: 98, targets: [{ kind: 'measured_move', label: 'Measured move', price: 102 }],
     contract: withContract ? { symbol: CONTRACT.symbol, ask: 2, expiration: '2026-10-30' } : null,
-    horizonExpiration: '2026-10-30',
+    horizonExpiration: '2026-10-30', settingsVersion: 1,
   }, T0);
   const id = db.upsertSignal({ ...row, lastTrackedAt });
   db.addEvents(id, events);

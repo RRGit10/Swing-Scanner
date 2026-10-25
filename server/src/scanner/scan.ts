@@ -1,5 +1,6 @@
 import { classifyLastThree } from '../analysis/candles.js';
-import { emaTable } from '../analysis/emaLevels.js';
+import { emaSet, latestEmas } from '../analysis/ema.js';
+import { dailyEmasInPath, ema55Reversals, emaTable } from '../analysis/emaLevels.js';
 import { mergeTimeframes, type TimeframeMatch } from '../analysis/merge.js';
 import { detectPatterns } from '../analysis/patterns/index.js';
 import { patternTargets } from '../analysis/targets.js';
@@ -87,6 +88,7 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
     };
 
     const horizonExpiration = fridayExpirations(expirations, ctx.today, s.contracts)[0] ?? null;
+    const dailyLatest = latestEmas(daily);
     const items = [];
     for (const sig of merged) {
       const m = sig.match;
@@ -110,6 +112,8 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
         },
         getChain,
       );
+      const reversals = ema55Reversals(candles, emaSet(candles)[55], m.direction, s.ema.reversalTolerance);
+      const lastReversal = reversals.at(-1);
       const drawings: PatternEntry['drawings'] = { [tf]: { points: m.points, lines: m.lines } };
       for (const o of sig.others) drawings[o.timeframe] = { points: o.match.points, lines: o.match.lines };
 
@@ -137,6 +141,8 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
           candleLabels: labels.labels,
           drawings,
           horizonExpiration,
+          dailyEmasInPath: daily.length ? dailyEmasInPath(dailyLatest, quote.price, targets.at(-1)!.price, m.direction) : [],
+          ema55Reversal: lastReversal != null && lastReversal >= candles.length - 3 ? { time: candles[lastReversal]!.time } : null,
         },
         result,
       });

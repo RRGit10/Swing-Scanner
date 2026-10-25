@@ -38,6 +38,7 @@ export interface AppSettings {
   patterns: PatternSettings;
   candles: CandleSettings;
   contracts: ContractSettings;
+  ema: { /** 55 EMA reversal: how close the touch candle must come (0.002 = 0.2%) */ reversalTolerance: number };
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -46,4 +47,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   patterns: DEFAULT_PATTERN_SETTINGS,
   candles: DEFAULT_CANDLE_SETTINGS,
   contracts: DEFAULT_CONTRACT_SETTINGS,
+  ema: { reversalTolerance: 0.002 },
 };

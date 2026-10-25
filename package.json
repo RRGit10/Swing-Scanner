@@ -7,10 +7,11 @@
   ],
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
-    "test": "npm run test -w server",
+    "test": "npm run test -w server && npm run test -w client",
     "smoke": "npm run smoke -w server --",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
-    "patterns": "npm run patterns -w server --"
+    "patterns": "npm run patterns -w server --",
+    "test:e2e": "npm run test:e2e -w client"
   },
   "devDependencies": {
     "concurrently": "^9.2.0"

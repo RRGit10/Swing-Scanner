@@ -47,6 +47,8 @@ describe('scanTicker (fake providers, bull flag fixture)', () => {
     expect(flag.drawings['15m']!.lines.map((l) => l.label)).toContain('target');
     expect(flag.candleLabels).toHaveLength(3);
     expect(flag.horizonExpiration).toBe('2026-10-30');
+    expect(flag.dailyEmasInPath).toEqual([]); // fixture has no daily bars
+    expect(flag).toHaveProperty('ema55Reversal');
     expect(entry.contracts.map((c) => c.contract.symbol)).toEqual([call.symbol]);
     expect(entry).toMatchObject({ ticker: 'SPY', price: 108.7, bestStatus: 'READY' });
   });

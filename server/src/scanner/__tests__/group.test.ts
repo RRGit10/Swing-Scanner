@@ -7,7 +7,7 @@ function pattern(over: Partial<PatternEntry>): Omit<PatternEntry, 'contract'> {
   return {
     key: 'k', type: 'double_top', direction: 'bearish', timeframes: ['15m'], tradingTimeframe: '15m', state: 'armed',
     status: 'WATCH', lowerQuality: false, triggerTime: null, triggerLevel: 1, invalidation: 2, targets: [], candleLabels: [],
-    drawings: {}, horizonExpiration: null, ...over,
+    drawings: {}, horizonExpiration: null, dailyEmasInPath: [], ema55Reversal: null, ...over,
   };
 }
 

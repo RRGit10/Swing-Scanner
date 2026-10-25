@@ -1,1 +1,90 @@
 @import "tailwindcss";
+
+/* Palette: cool paper + navy ink; teal-green long, crimson short, amber for the entry zone.
+   Dark mode follows the system. */
+:root {
+  --paper: #eef1f3;
+  --surface: #f7f9fa;
+  --ink: #1d2b3a;
+  --ink-2: #4a5a6b;
+  --ink-3: #7a8896;
+  --rule: #c9d1d8;
+  --long: #0f7b61;
+  --short: #b4233c;
+  --amber: #d99a00;
+  --amber-wash: #f6e3b0;
+  --ema-13: #d99a00;
+  --ema-48: #4f7cab;
+  --ema-55: #1d2b3a;
+  --ema-200: #8a6fa8;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #13202e;
+    --surface: #182838;
+    --ink: #dce4ea;
+    --ink-2: #a3b3c2;
+    --ink-3: #74869a;
+    --rule: #2c3b4b;
+    --long: #3fbf98;
+    --short: #f06a80;
+    --amber: #f2b53a;
+    --amber-wash: #4a3a12;
+    --ema-13: #f2b53a;
+    --ema-48: #7aa7d6;
+    --ema-55: #dce4ea;
+    --ema-200: #b59bd3;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-long: var(--long);
+  --color-short: var(--short);
+  --color-amber: var(--amber);
+  --color-amber-wash: var(--amber-wash);
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The identity: ticker symbols in Archivo's expanded, heavy cut. */
+.ticker {
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.condensed {
+  font-stretch: 85%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -8,7 +8,8 @@
     "test:watch": "vitest",
     "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit",
-    "patterns": "tsx scripts/patterns.ts"
+    "patterns": "tsx scripts/patterns.ts",
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

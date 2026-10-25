@@ -13,7 +13,8 @@ export interface LoopDeps {
   market: MarketCalendarProvider;
   db: ScannerDb;
   scan: ScanDeps;
-  settings: AppSettings;
+  /** read at the start of every scan, so saved changes apply from the next scan */
+  settings: () => { version: number; settings: AppSettings };
   now?: () => number;
   log?: (msg: string) => void;
 }
@@ -43,9 +44,11 @@ export class ScannerLoop {
     this.log = deps.log ?? ((m) => console.log(`[scanner] ${m}`));
   }
 
-  async start(opts: { heartbeat?: boolean } = {}): Promise<void> {
+  /** readOnly: serve saved results only (no scans, no tracking) — used by the browser tests. */
+  async start(opts: { heartbeat?: boolean; readOnly?: boolean } = {}): Promise<void> {
     await this.refreshCalendar();
     this.lastScanAt = this.deps.db.latestScan()?.startedAt ?? null;
+    if (opts.readOnly) return;
     await this.track('startup');
     if (this.isOpen() || !this.deps.db.latestScan()) await this.scanOnce();
     this.plan();
@@ -78,11 +81,12 @@ export class ScannerLoop {
     const started = this.now();
     try {
       await this.refreshCalendar();
+      const { version, settings } = this.deps.settings();
       const today = etClock(started).date;
       const sessionDate = lastSessionDate(this.calendar, started) ?? today;
-      const ctx = { today, sessionDate, calendar: this.calendar, settings: this.deps.settings };
+      const ctx = { today, sessionDate, calendar: this.calendar, settings };
       const entries: TickerEntry[] = [];
-      for (const symbol of this.deps.settings.watchlist) entries.push(await scanTicker(this.deps.scan, symbol, ctx));
+      for (const symbol of settings.watchlist) entries.push(await scanTicker(this.deps.scan, symbol, ctx));
 
       const sorted = sortTickers(entries);
       const errors = entries.filter((e) => e.error).map((e) => `${e.ticker}: ${e.error}`);
@@ -91,12 +95,12 @@ export class ScannerLoop {
         finishedAt: this.now(),
         market: this.isOpen() ? 'open' : 'closed',
         sessionDate,
-        payload: { tickers: sorted },
+        payload: { tickers: sorted, settingsVersion: version },
         errors,
       });
       // Closed-market scans are display-only: they never create, trigger, freeze or update history records.
       if (this.isOpen()) {
-        this.persistSignals(sorted, started);
+        this.persistSignals(sorted, started, version, settings.watchlist);
         await noteEntryAsks(this.trackerDeps(), sorted, sessionDate);
       }
       await this.track('scan');
@@ -117,7 +121,7 @@ export class ScannerLoop {
       const now = this.now();
       if (this.isOpen() && (this.nextScanAt == null || now >= this.nextScanAt)) await this.scanOnce();
       const day = this.today();
-      if (day && this.postCloseTrackedFor !== day.date && now >= etToUnix(day.date, hhmmToMinutes(day.close)) + this.deps.settings.scanner.postCloseTrackMin * 60) {
+      if (day && this.postCloseTrackedFor !== day.date && now >= etToUnix(day.date, hhmmToMinutes(day.close)) + this.deps.settings().settings.scanner.postCloseTrackMin * 60) {
         this.postCloseTrackedFor = day.date;
         await this.track('post-close');
       }
@@ -128,25 +132,27 @@ export class ScannerLoop {
   }
 
   private plan(): void {
-    this.nextScanAt = nextScanTime(this.now(), this.today(), this.deps.settings.scanner);
+    this.nextScanAt = nextScanTime(this.now(), this.today(), this.deps.settings().settings.scanner);
   }
 
-  private persistSignals(entries: TickerEntry[], now: number): void {
+  private persistSignals(entries: TickerEntry[], now: number, version: number, watchlist: string[]): void {
     const db = this.deps.db;
     const seen = new Set<string>();
     for (const entry of entries) {
       for (const p of entry.patterns) {
         seen.add(p.key);
-        const { row, events } = applyScan(db.getSignal(p.key), toSnapshot(entry, p), now);
+        const { row, events } = applyScan(db.getSignal(p.key), toSnapshot(entry, p, version), now);
         const id = db.upsertSignal(row);
         if (events.length) db.addEvents(id, events);
       }
     }
     // Only end signals of tickers that scanned cleanly: an API error is not "no longer detected".
     const clean = new Set(entries.filter((e) => !e.error).map((e) => e.ticker));
+    const listed = new Set(watchlist);
     for (const row of db.activeSignals()) {
-      if (seen.has(row.key) || !clean.has(row.ticker)) continue;
-      const { row: ended, events } = endMissing(row, now);
+      const removed = !listed.has(row.ticker);
+      if (seen.has(row.key) || (!removed && !clean.has(row.ticker))) continue;
+      const { row: ended, events } = endMissing(row, now, removed ? 'removed from watchlist' : 'no longer detected');
       db.upsertSignal(ended);
       db.addEvents(row.id!, events);
     }
@@ -162,7 +168,7 @@ export class ScannerLoop {
       db: this.deps.db,
       candles: this.deps.scan.candles,
       options: this.deps.scan.options,
-      settings: this.deps.settings,
+      settings: this.deps.settings().settings,
       calendar: () => this.calendar,
     };
   }
@@ -185,7 +191,7 @@ export class ScannerLoop {
   }
 }
 
-function toSnapshot(entry: TickerEntry, p: PatternEntry): SignalSnapshot {
+function toSnapshot(entry: TickerEntry, p: PatternEntry, settingsVersion: number): SignalSnapshot {
   const pick = 'symbol' in p.contract ? entry.contracts.find((c) => c.contract.symbol === (p.contract as { symbol: string }).symbol) : undefined;
   return {
     key: p.key,
@@ -203,5 +209,6 @@ function toSnapshot(entry: TickerEntry, p: PatternEntry): SignalSnapshot {
     targets: p.targets,
     contract: pick ? { symbol: pick.contract.symbol, ask: pick.contract.ask, expiration: pick.expiration } : null,
     horizonExpiration: p.horizonExpiration,
+    settingsVersion,
   };
 }
