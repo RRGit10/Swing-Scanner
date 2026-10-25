@@ -49,6 +49,15 @@ describe('AlpacaClient guard', () => {
     expect(requestedUrl().origin).toBe('https://data.alpaca.markets');
   });
 
+  it('allows only the read-only clock and calendar paths besides option contracts on the paper API', async () => {
+    await client.get('paper', '/v2/clock', {});
+    await client.get('paper', '/v2/calendar', { start: '2026-10-26', end: '2026-11-30' });
+    expect(fetchMock.mock.calls.map((c) => new URL(String(c[0])).pathname)).toEqual(['/v2/clock', '/v2/calendar']);
+    expect(requestedUrl().origin).toBe('https://paper-api.alpaca.markets');
+    await expect(client.get('paper', '/v2/clock/../orders', {})).rejects.toThrow(/not allowed/);
+    await expect(client.get('data', '/v2/clock', {})).rejects.toThrow(/not allowed/);
+  });
+
   it('sends option contracts to the paper API, never the live trading host', async () => {
     await client.get('paper', '/v2/options/contracts', { underlying_symbols: 'SPY' });
     expect(requestedUrl().origin).toBe('https://paper-api.alpaca.markets');

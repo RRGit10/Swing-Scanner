@@ -70,12 +70,16 @@ export interface EarningsEvent {
 
 export interface CandleProvider {
   getCandles(symbol: string, timeframe: Timeframe, range?: CandleRange): Promise<Candle[]>;
+  /** regular-hours 1-minute bars in [start, end] (used for outcome tracking) */
+  getMinuteBars(symbol: string, start: Date, end: Date): Promise<Candle[]>;
 }
 
 export interface OptionsProvider {
   /** YYYY-MM-DD dates, ascending */
   getExpirations(symbol: string): Promise<string[]>;
   getChain(symbol: string, expiration: string): Promise<OptionContract[]>;
+  /** current snapshot of one contract by OCC symbol, or null if not listed */
+  getContract(occSymbol: string): Promise<OptionContract | null>;
 }
 
 export interface QuoteProvider {

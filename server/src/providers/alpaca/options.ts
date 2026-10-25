@@ -100,6 +100,8 @@ export function joinOpenInterest(chain: OptionContract[], contracts: ContractOpe
 }
 
 export class AlpacaOptionsProvider implements OptionsProvider {
+  private readonly oiCache = new Map<string, { date: string; value: Promise<ContractOpenInterest[]> }>();
+
   constructor(private readonly client: AlpacaClient) {}
 
   async getExpirations(symbol: string): Promise<string[]> {
@@ -115,20 +117,53 @@ export class AlpacaOptionsProvider implements OptionsProvider {
   }
 
   async getChain(symbol: string, expiration: string): Promise<OptionContract[]> {
-    const [snapshotPages, contractPages] = await Promise.all([
+    const [snapshotPages, openInterest] = await Promise.all([
       this.client.getAllPages('data', `/v1beta1/options/snapshots/${symbol}`, {
         feed: config.optionsFeed,
         expiration_date: expiration,
         limit: '1000',
       }),
-      this.client.getAllPages('paper', '/v2/options/contracts', {
+      this.openInterest(symbol, expiration),
+    ]);
+    const chain = snapshotPages.flatMap(mapSnapshots).sort((a, b) => a.strike - b.strike || a.type.localeCompare(b.type));
+    return joinOpenInterest(chain, openInterest);
+  }
+
+  /** One contract's current snapshot (quote, greeks, day bar) via the per-underlying path, filtered to its strike. */
+  async getContract(occSymbol: string): Promise<OptionContract | null> {
+    const occ = parseOcc(occSymbol);
+    if (!occ) return null;
+    const [pages, openInterest] = await Promise.all([
+      this.client.getAllPages('data', `/v1beta1/options/snapshots/${occ.underlying}`, {
+        feed: config.optionsFeed,
+        expiration_date: occ.expiration,
+        type: occ.type,
+        strike_price_gte: String(occ.strike),
+        strike_price_lte: String(occ.strike),
+        limit: '1000',
+      }),
+      this.openInterest(occ.underlying, occ.expiration),
+    ]);
+    const found = pages.flatMap(mapSnapshots).filter((c) => c.symbol === occSymbol);
+    return joinOpenInterest(found, openInterest)[0] ?? null;
+  }
+
+  /** Open interest is published once a day, so it is fetched once per underlying + expiration per ET date. */
+  private openInterest(symbol: string, expiration: string): Promise<ContractOpenInterest[]> {
+    const key = `${symbol}|${expiration}`;
+    const today = etToday();
+    const cached = this.oiCache.get(key);
+    if (cached?.date === today) return cached.value;
+    const value = this.client
+      .getAllPages('paper', '/v2/options/contracts', {
         underlying_symbols: symbol,
         status: 'active',
         expiration_date: expiration,
         limit: '10000',
-      }),
-    ]);
-    const chain = snapshotPages.flatMap(mapSnapshots).sort((a, b) => a.strike - b.strike || a.type.localeCompare(b.type));
-    return joinOpenInterest(chain, contractPages.flatMap(mapContracts));
+      })
+      .then((pages) => pages.flatMap(mapContracts));
+    this.oiCache.set(key, { date: today, value });
+    value.catch(() => this.oiCache.get(key)?.value === value && this.oiCache.delete(key));
+    return value;
   }
 }

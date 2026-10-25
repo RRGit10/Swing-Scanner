@@ -25,6 +25,23 @@ export function etStamp(date: Date): string {
   return `${day} ${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
+/** Unix seconds for an ET wall-clock time: `minutes` after midnight on `date` (YYYY-MM-DD). DST-aware. */
+export function etToUnix(date: string, minutes: number): number {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  for (const offsetHours of [4, 5]) {
+    const t = Date.UTC(y, m - 1, d, 0, minutes) / 1000 + offsetHours * 3600;
+    const c = etClock(t);
+    if (c.date === date && c.minutes === minutes) return t;
+  }
+  throw new Error(`Invalid ET time ${date} +${minutes}min`);
+}
+
+/** "HH:MM" → minutes after midnight. */
+export function hhmmToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number) as [number, number];
+  return h * 60 + m;
+}
+
 /** Today's date in ET, YYYY-MM-DD. */
 export function etToday(): string {
   return etClock(Date.now() / 1000).date;

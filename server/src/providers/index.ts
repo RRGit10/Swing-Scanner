@@ -1,4 +1,6 @@
 import { requireEnv } from '../config.js';
+import { RateLimiter } from '../scanner/limiter.js';
+import { DEFAULT_SCANNER_SETTINGS } from '../scanner/settings.js';
 import { AlpacaCandleProvider } from './alpaca/candles.js';
 import { AlpacaClient } from './alpaca/client.js';
 import { AlpacaOptionsProvider } from './alpaca/options.js';
@@ -14,13 +16,17 @@ export interface Providers {
   earnings: EarningsProvider;
 }
 
+/** One limiter per provider, shared by every client in the process (free-plan limits, with headroom). */
+const alpacaLimiter = new RateLimiter(DEFAULT_SCANNER_SETTINGS.alpacaPerMinute);
+const finnhubLimiter = new RateLimiter(DEFAULT_SCANNER_SETTINGS.finnhubPerMinute);
+
 export function createAlpacaClient(): AlpacaClient {
-  return new AlpacaClient(requireEnv('ALPACA_API_KEY_ID'), requireEnv('ALPACA_SECRET_KEY'));
+  return new AlpacaClient(requireEnv('ALPACA_API_KEY_ID'), requireEnv('ALPACA_SECRET_KEY'), alpacaLimiter);
 }
 
 export function createProviders(): Providers {
   const alpaca = createAlpacaClient();
-  const finnhub = new FinnhubClient(requireEnv('FINNHUB_API_KEY'));
+  const finnhub = new FinnhubClient(requireEnv('FINNHUB_API_KEY'), finnhubLimiter);
   return {
     candles: new AlpacaCandleProvider(alpaca),
     options: new AlpacaOptionsProvider(alpaca),

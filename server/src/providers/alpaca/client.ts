@@ -1,3 +1,4 @@
+import type { RateLimiter } from '../../scanner/limiter.js';
 import { fetchJson } from '../http.js';
 
 /**
@@ -14,7 +15,8 @@ export type AlpacaApi = keyof typeof BASE_URLS;
 /** Read-only allowlist. Anything else (orders, positions, account, …) is refused before a request is made. */
 const ALLOWED_PATHS: Record<AlpacaApi, RegExp[]> = {
   data: [/^\/v2\/stocks\/bars$/, /^\/v1beta1\/options\/snapshots\/[A-Z.]{1,10}$/],
-  paper: [/^\/v2\/options\/contracts$/],
+  // Read-only reference data only: option contracts, market clock, trading calendar.
+  paper: [/^\/v2\/options\/contracts$/, /^\/v2\/clock$/, /^\/v2\/calendar$/],
 };
 
 const DEFAULT_MAX_PAGES = 20;
@@ -23,6 +25,7 @@ export class AlpacaClient {
   constructor(
     private readonly keyId: string,
     private readonly secretKey: string,
+    private readonly limiter?: RateLimiter,
   ) {}
 
   async get(api: AlpacaApi, path: string, params: Record<string, string>): Promise<unknown> {
@@ -31,11 +34,13 @@ export class AlpacaClient {
     }
     const url = new URL(BASE_URLS[api] + path);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-    return fetchJson('Alpaca', url, {
-      'APCA-API-KEY-ID': this.keyId,
-      'APCA-API-SECRET-KEY': this.secretKey,
-      Accept: 'application/json',
-    });
+    const call = () =>
+      fetchJson('Alpaca', url, {
+        'APCA-API-KEY-ID': this.keyId,
+        'APCA-API-SECRET-KEY': this.secretKey,
+        Accept: 'application/json',
+      });
+    return this.limiter ? this.limiter.run(call) : call();
   }
 
   /** Follows next_page_token and returns every page body. Throws rather than truncate at the cap. */
