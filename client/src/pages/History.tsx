@@ -12,6 +12,7 @@ const OUTCOME_TEXT: Record<Outcome, string> = {
   open: 'Not triggered yet',
   never_triggered: 'Never triggered',
   no_contract: 'No Friday to track',
+  already_resolved: 'Already resolved when first seen',
 };
 
 const OUTCOME_STYLE: Partial<Record<Outcome, string>> = { win: 'text-long font-semibold', loss: 'text-short font-semibold', expired: 'text-ink-2' };
@@ -179,7 +180,8 @@ function HitRates({ summary }: { summary: HistorySummary }) {
         </p>
       </div>
       <p className="text-sm text-ink-3 md:col-span-2">
-        {summary.triggered} triggered ({summary.pending} still tracking), {summary.neverTriggered} never triggered. T1 counts on a touch, invalidation on a close, which slightly favors wins.
+        {summary.triggered} triggered ({summary.pending} still tracking), {summary.neverTriggered} never triggered
+        {summary.alreadyResolved ? `, ${summary.alreadyResolved} already resolved when first seen (left out of both hit rates)` : ''}. Signals are judged only from when they were first seen live. T1 counts on a touch, invalidation on a close, which slightly favors wins.
       </p>
     </div>
   );
@@ -189,6 +191,7 @@ function gainCell(s: HistorySignal) {
   if (s.gainPct != null) return <span className={s.gainPct >= 0 ? 'text-long' : 'text-short'}>{signedPct(s.gainPct)}</span>;
   if (s.exitNote === 'exit quote missed') return <span className="text-ink-3">Exit quote missed</span>;
   if (s.exitNote === 'no contract') return <span className="text-ink-3">No contract</span>;
+  if (s.outcome === 'already_resolved') return <span className="text-ink-3">Not counted</span>;
   return <span className="text-ink-3">—</span>;
 }
 
@@ -199,10 +202,17 @@ function eventText(e: HistorySignal['events'][number]): string {
     case 'status': return `Status ${e.from} → ${e.to}`;
     case 'contract': return `Contract ${e.from ? contractName(e.from) : 'none'} → ${e.to ? contractName(e.to) : 'none'}`;
     case 'triggered': return `Triggered. Frozen: ${e.to ? contractName(e.to) : 'no contract'}, entry ask ${money(d.entryAsk as number | null)}, T1 ${money(d.t1 as number | null)}`;
-    case 'outcome': return `Outcome: ${OUTCOME_TEXT[e.to as Outcome] ?? e.to} at ${etDateTime(d.at as number)}`;
+    case 'outcome':
+      return e.to === 'already_resolved'
+        ? `Already resolved before first seen: ${String(d.by ?? '')} at ${etDateTime(d.at as number)}`
+        : `Outcome: ${OUTCOME_TEXT[e.to as Outcome] ?? e.to} at ${etDateTime(d.at as number)}`;
     case 'exit_quote': return e.to === 'ok' ? `Exit quote: bid ${money(d.bid as number)}, ask ${money(d.ask as number)} (indicative)` : 'Exit quote missed';
     case 'backfill': return `Backfilled after downtime (${etDateTime(Number(e.from))} → ${etDateTime(Number(e.to))})`;
     case 'ended': return `Ended (${(d.outcome as string) ?? ''})`;
+    case 'reevaluated':
+      return e.from === e.to
+        ? `Re-checked under first-seen tracking: ${OUTCOME_TEXT[e.to as Outcome] ?? e.to} stands (${String(d.reason ?? '')})`
+        : `Re-checked under first-seen tracking: ${OUTCOME_TEXT[e.from as Outcome] ?? e.from} → ${OUTCOME_TEXT[e.to as Outcome] ?? e.to} (${String(d.reason ?? '')})`;
     case 'reappeared': return 'Detected again';
     default: return e.kind;
   }

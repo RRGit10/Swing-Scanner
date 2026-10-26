@@ -51,8 +51,9 @@ describe('ScannerDb (in-memory)', () => {
     mk('g', 'never_triggered', null, null);
     mk('h', 'pending', 'C5', null);
     mk('i', 'no_contract', null, null);
+    mk('j', 'already_resolved', 'C6', null); // excluded from both hit rates
     expect(db.historySummary()).toEqual({
-      total: 9, triggered: 7, pending: 1, neverTriggered: 1, noContract: 1,
+      total: 10, triggered: 7, pending: 1, neverTriggered: 1, noContract: 1, alreadyResolved: 1,
       pattern: { resolved: 6, wins: 3, losses: 2, expired: 1, hitRate: 0.5 },
       tradeable: { resolved: 4, wins: 2, losses: 1, expired: 1, hitRate: 0.5, avgGainPct: 5, gainSamples: 2 },
     });

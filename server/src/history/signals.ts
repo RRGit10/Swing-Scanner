@@ -7,9 +7,10 @@ import type { SignalStatus } from '../scanner/status.js';
 
 /**
  * open = seen, not triggered · pending = triggered, being tracked · win / loss / expired = resolved ·
- * never_triggered = disappeared before triggering · no_contract = triggered with no Friday 3–30 days out to track against
+ * never_triggered = disappeared before triggering · no_contract = triggered with no Friday 3–30 days out to track against ·
+ * already_resolved = T1 or invalidation was reached before the signal was first seen live (excluded from hit rates)
  */
-export type Outcome = 'open' | 'pending' | 'win' | 'loss' | 'expired' | 'never_triggered' | 'no_contract';
+export type Outcome = 'open' | 'pending' | 'win' | 'loss' | 'expired' | 'never_triggered' | 'no_contract' | 'already_resolved';
 
 /** What one scan says about a signal. */
 export interface SignalSnapshot {
@@ -59,6 +60,10 @@ export interface SignalRow {
   entryAsk: number | null;
   expiration: string | null;
   lowestEntryAsk: number | null;
+  /** live tracking starts here: the later of the trigger and first seen (a signal is never judged before we saw it) */
+  trackedFrom: number | null;
+  /** the window between the trigger and first seen has been checked for an outcome that already happened */
+  preChecked: boolean;
   /** outcome evaluated through this time */
   lastTrackedAt: number | null;
   outcome: Outcome;
@@ -77,7 +82,7 @@ export interface SignalRow {
 }
 
 export interface SignalEvent {
-  kind: 'first_seen' | 'status' | 'contract' | 'triggered' | 'ended' | 'reappeared' | 'outcome' | 'exit_quote' | 'backfill';
+  kind: 'first_seen' | 'status' | 'contract' | 'triggered' | 'ended' | 'reappeared' | 'outcome' | 'exit_quote' | 'backfill' | 'reevaluated';
   at: number;
   from: string | null;
   to: string | null;
@@ -108,7 +113,7 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
     row = {
       key: cur.key, ticker: cur.ticker, type: cur.type, direction: cur.direction, firstSeenAt: now, ...live,
       triggerTime: cur.triggerTime, frozenAt: null, frozenT1: null, frozenContract: null, entryAsk: null, expiration: null,
-      lowestEntryAsk: null, lastTrackedAt: null, outcome: 'open', outcomeAt: null, exitBid: null, exitAsk: null,
+      lowestEntryAsk: null, trackedFrom: null, preChecked: false, lastTrackedAt: null, outcome: 'open', outcomeAt: null, exitBid: null, exitAsk: null,
       exitQuoteTime: null, exitNote: null, gainPct: null, endedAt: null, endedReason: null, settingsVersion: cur.settingsVersion,
     };
     events.push(event('first_seen', now, null, cur.status, { contract: row.contractSymbol }));
@@ -125,6 +130,10 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
   }
 
   if (cur.state === 'triggered' && row.frozenAt == null) {
+    // Frozen when we see the trigger; judged only from when we could have acted on it.
+    const start = Math.max(cur.triggerTime ?? now, row.firstSeenAt);
+    row.trackedFrom = start;
+    row.preChecked = !(cur.triggerTime != null && cur.triggerTime < row.firstSeenAt);
     row.frozenAt = now;
     row.frozenT1 = cur.targets[0]?.price ?? null;
     row.triggerTime = cur.triggerTime;
@@ -133,12 +142,12 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
       row.entryAsk = cur.contract.ask;
       row.expiration = cur.contract.expiration;
       row.outcome = 'pending';
-      row.lastTrackedAt = cur.triggerTime ?? now;
+      row.lastTrackedAt = start;
     } else if (cur.horizonExpiration) {
       // Stock outcome is still tracked (pattern hit rate); there is no option exit to quote.
       row.expiration = cur.horizonExpiration;
       row.outcome = 'pending';
-      row.lastTrackedAt = cur.triggerTime ?? now;
+      row.lastTrackedAt = start;
       row.exitNote = 'no contract';
     } else {
       row.outcome = 'no_contract';

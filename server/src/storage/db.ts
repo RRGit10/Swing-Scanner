@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS settings_versions (
 /** Columns added after the first release; added to older databases on open. */
 const MIGRATIONS: [table: string, column: string, ddl: string][] = [
   ['signals', 'settings_version', 'ALTER TABLE signals ADD COLUMN settings_version INTEGER NOT NULL DEFAULT 1'],
+  ['signals', 'tracked_from', 'ALTER TABLE signals ADD COLUMN tracked_from INTEGER'],
+  ['signals', 'pre_checked', 'ALTER TABLE signals ADD COLUMN pre_checked INTEGER NOT NULL DEFAULT 0'],
 ];
 
 /** camelCase row field → column. JSON fields are (de)serialized; booleans stored as 0/1. */
@@ -83,6 +85,7 @@ const COLUMNS: [keyof SignalRow, string, 'json' | 'bool' | 'plain'][] = [
   ['outcome', 'outcome', 'plain'], ['outcomeAt', 'outcome_at', 'plain'], ['exitBid', 'exit_bid', 'plain'], ['exitAsk', 'exit_ask', 'plain'],
   ['exitQuoteTime', 'exit_quote_time', 'plain'], ['exitNote', 'exit_note', 'plain'], ['gainPct', 'gain_pct', 'plain'],
   ['endedAt', 'ended_at', 'plain'], ['endedReason', 'ended_reason', 'plain'], ['settingsVersion', 'settings_version', 'plain'],
+  ['trackedFrom', 'tracked_from', 'plain'], ['preChecked', 'pre_checked', 'bool'],
 ];
 
 export interface SavedScan {
@@ -119,6 +122,8 @@ export interface HistorySummary {
   pending: number;
   neverTriggered: number;
   noContract: number;
+  /** T1 or invalidation reached before first seen: not counted in either hit rate */
+  alreadyResolved: number;
   /** every triggered signal, judged on the stock */
   pattern: OutcomeCounts;
   /** triggered signals that had a contract frozen, with the indicative option gain */
@@ -222,6 +227,11 @@ export class ScannerDb {
     return (this.db.prepare(sql).all() as DbRow[]).map(toRow);
   }
 
+  /** Triggered rows stored before tracking started at first seen (no tracking start yet). */
+  rowsToReevaluate(): SignalRow[] {
+    return (this.db.prepare('SELECT * FROM signals WHERE frozen_at IS NOT NULL AND tracked_from IS NULL ORDER BY id').all() as DbRow[]).map(toRow);
+  }
+
   allSignals(): SignalRow[] {
     return (this.db.prepare('SELECT * FROM signals ORDER BY first_seen_at DESC, id DESC').all() as DbRow[]).map(toRow);
   }
@@ -275,6 +285,7 @@ export class ScannerDb {
       pending: all.pending ?? 0,
       neverTriggered: all.never_triggered ?? 0,
       noContract: all.no_contract ?? 0,
+      alreadyResolved: all.already_resolved ?? 0,
       pattern,
       tradeable: { ...outcomes(countBy(where('frozen_contract IS NOT NULL'))), avgGainPct: gains.cnt ? gains.avg : null, gainSamples: gains.cnt },
     };

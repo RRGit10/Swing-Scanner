@@ -64,6 +64,17 @@ describe('applyScan', () => {
     expect(later).toMatchObject({ frozenT1: 753.59, frozenContract: 'SPY261030P00756000', entryAsk: 4.97, expiration: '2026-10-30' });
   });
 
+  it('already triggered when first seen: frozen now, tracked from first-seen time, pre-trigger window queued for checking', () => {
+    const { row } = applyScan(null, snap({ state: 'triggered', status: 'READY', triggerTime: NOW - 3 * 86400 }), NOW);
+    expect(row).toMatchObject({ frozenAt: NOW, trackedFrom: NOW, lastTrackedAt: NOW, preChecked: false, outcome: 'pending', triggerTime: NOW - 3 * 86400 });
+  });
+
+  it('seen armed, triggered later: tracked from the trigger, nothing to pre-check', () => {
+    const first = applyScan(null, snap(), NOW).row;
+    const { row } = applyScan(first, snap({ state: 'triggered', status: 'READY', triggerTime: NOW + 600 }), NOW + 720);
+    expect(row).toMatchObject({ trackedFrom: NOW + 600, lastTrackedAt: NOW + 600, preChecked: true });
+  });
+
   it('trigger with no contract → stock outcome still tracked to the nearest-Friday horizon; no exit quote needed', () => {
     const { row } = applyScan(null, snap({ state: 'triggered', status: 'READY', triggerTime: NOW, contract: null }), NOW);
     expect(row).toMatchObject({

@@ -1,5 +1,6 @@
 import type { StatusPayload } from '../api/routes.js';
 import { applyScan, endMissing, type SignalSnapshot } from '../history/signals.js';
+import { reevaluateHistory } from '../history/reevaluate.js';
 import { noteEntryAsks, trackOutcomes, type TrackerDeps } from '../history/tracker.js';
 import { lastSessionDate, type MarketCalendarProvider, type TradingDay } from '../market/clock.js';
 import { inLiquidWindow, isMarketOpen, nextScanTime } from '../market/timing.js';
@@ -49,6 +50,8 @@ export class ScannerLoop {
     await this.refreshCalendar();
     this.lastScanAt = this.deps.db.latestScan()?.startedAt ?? null;
     if (opts.readOnly) return;
+    const re = reevaluateHistory(this.deps.db, this.now());
+    if (re.changed || re.confirmed) this.log(`history re-evaluated (tracking from first seen): ${re.changed} changed, ${re.confirmed} confirmed`);
     await this.track('startup');
     if (this.isOpen() || !this.deps.db.latestScan()) await this.scanOnce();
     this.plan();

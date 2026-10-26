@@ -102,6 +102,57 @@ describe('trackOutcomes', () => {
     expect(fetched).toBe(0);
   });
 
+  describe('triggered before it was first seen', () => {
+    const SEEN = T0 + 2 * 3600; // first seen 12:00, trigger candle closed 10:00
+    function seenLate(minutes: Candle[], bars15: Candle[] = []) {
+      const db = new ScannerDb(':memory:');
+      const { row, events } = applyScan(null, {
+        key: 'META|bear_flag|bearish|1', ticker: 'META', type: 'bear_flag', direction: 'bearish', timeframes: ['1h'], tradingTimeframe: '1h',
+        state: 'triggered', status: 'WATCH', lowerQuality: false, triggerTime: T0, triggerLevel: 100, invalidation: 104,
+        targets: [{ kind: 'measured_move', label: 'Measured move', price: 97 }], contract: null, horizonExpiration: '2026-10-30', settingsVersion: 1,
+      }, SEEN);
+      const id = db.upsertSignal(row);
+      db.addEvents(id, events);
+      let quotes = 0;
+      const deps: TrackerDeps = {
+        db, candles: new CandleCache(new FakeBars(minutes, bars15)), settings: DEFAULT_APP_SETTINGS, calendar: () => [],
+        options: { getExpirations: async () => [], getChain: async () => [], getContract: async () => (quotes++, null) },
+      };
+      return { db, id, deps, get: () => db.getSignal('META|bear_flag|bearish|1')!, quotes: () => quotes };
+    }
+    const low = (offsetMin: number, l: number): Candle => ({ time: T0 + offsetMin * 60, open: 100, high: 100.5, low: l, close: 100, volume: 1 });
+
+    it('T1 already touched before first seen → "already resolved when first seen", no backfill, no exit quote', async () => {
+      const { deps, db, id, get, quotes } = seenLate([low(30, 96.9), low(150, 96)]);
+      await trackOutcomes(deps, SEEN + 25 * 60);
+      expect(get()).toMatchObject({ outcome: 'already_resolved', outcomeAt: T0 + 30 * 60, exitNote: 'already resolved when first seen', gainPct: null });
+      expect(db.events(id).map((e) => [e.kind, e.to])).toEqual([['first_seen', 'WATCH'], ['triggered', null], ['outcome', 'already_resolved']]);
+      expect(quotes()).toBe(0);
+      expect(db.historySummary().pattern).toMatchObject({ resolved: 0, wins: 0 });
+      expect(db.historySummary().alreadyResolved).toBe(1);
+    });
+
+    it('invalidation already closed before first seen → already resolved', async () => {
+      // the 09:30 bar of the 1h trading chart closes at 10:30 above invalidation
+      const { deps, get } = seenLate([], [{ time: T0 - 30 * 60, open: 103, high: 104.6, low: 102.9, close: 104.2, volume: 1 }]);
+      await trackOutcomes(deps, SEEN + 25 * 60);
+      expect(get()).toMatchObject({ outcome: 'already_resolved', outcomeAt: T0 + 30 * 60 });
+    });
+
+    it('nothing before first seen → measured from first seen only (a later T1 touch is a normal win), no backfill event', async () => {
+      const { deps, db, id, get } = seenLate([low(30, 98), low(140, 96.8)]);
+      await trackOutcomes(deps, SEEN + 25 * 60);
+      expect(get()).toMatchObject({ outcome: 'win', outcomeAt: T0 + 140 * 60, preChecked: true });
+      expect(db.events(id).map((e) => e.kind)).not.toContain('backfill');
+    });
+
+    it('waits until the delayed data covers the first-seen moment before judging', async () => {
+      const { deps, get } = seenLate([low(30, 98)]);
+      await trackOutcomes(deps, SEEN + 5 * 60);
+      expect(get()).toMatchObject({ outcome: 'pending', preChecked: false });
+    });
+  });
+
   it('expired: neither by the expiration close; no exit quote needed', async () => {
     const { deps, get } = setup([minute(5, 101)], null);
     await trackOutcomes(deps, Date.parse('2026-10-30T17:00:00-04:00') / 1000);

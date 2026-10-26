@@ -61,7 +61,7 @@ export interface ChartPayload {
   patterns: { key: string; type: string; direction: Direction; status: Status; points: KeyPoint[]; lines: PatternLine[] }[];
 }
 
-export type Outcome = 'open' | 'pending' | 'win' | 'loss' | 'expired' | 'never_triggered' | 'no_contract';
+export type Outcome = 'open' | 'pending' | 'win' | 'loss' | 'expired' | 'never_triggered' | 'no_contract' | 'already_resolved';
 export interface SignalEvent { kind: string; at: number; from: string | null; to: string | null; detail: unknown }
 export interface HistorySignal {
   id: number; key: string; ticker: string; type: string; direction: Direction; timeframes: IntradayTf[];
@@ -74,6 +74,8 @@ export interface HistorySignal {
 export interface OutcomeCounts { resolved: number; wins: number; losses: number; expired: number; hitRate: number | null }
 export interface HistorySummary {
   total: number; triggered: number; pending: number; neverTriggered: number; noContract: number;
+  /** absent from servers before this field existed */
+  alreadyResolved?: number;
   pattern: OutcomeCounts; tradeable: OutcomeCounts & { avgGainPct: number | null; gainSamples: number };
 }
 export interface SettingsChange { path: string; from: unknown; to: unknown }

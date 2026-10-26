@@ -32,8 +32,31 @@ export async function trackOutcomes(deps: TrackerDeps, now: number): Promise<{ e
       let row: SignalRow = original;
       const events: SignalEvent[] = [];
 
+      if (row.outcome === 'pending' && !row.preChecked) {
+        // Triggered before we first saw it: did T1 or invalidation already happen before we could act?
+        const seen = row.trackedFrom!;
+        if (now < seen + s.dataSettleMin * 60) continue; // delayed data doesn't cover the first-seen moment yet
+        const start = row.triggerTime ?? seen;
+        const minutes = await deps.candles.provider.getMinuteBars(row.ticker, new Date(start * 1000), new Date(seen * 1000));
+        const trading = timeframeCandles(await deps.candles.get15m(row.ticker))[row.tradingTimeframe];
+        const before = evaluateOutcome(
+          { direction: row.direction, t1: row.frozenT1!, invalidation: row.invalidation, fromTime: start, expirationClose: seen, tradingTfMinutes: TF_MINUTES[row.tradingTimeframe] },
+          minutes,
+          trading,
+          0, // never "expired": this window only looks for a T1 touch or an invalidation close
+        );
+        if (before) {
+          row = { ...row, preChecked: true, outcome: 'already_resolved', outcomeAt: before.at, exitNote: 'already resolved when first seen', gainPct: null };
+          deps.db.upsertSignal(row);
+          deps.db.addEvents(row.id!, [{ kind: 'outcome', at: now, from: 'pending', to: 'already_resolved', detail: { at: before.at, by: before.kind === 'win' ? 'T1 touched' : 'invalidation close', firstSeenAt: row.firstSeenAt } }]);
+          continue;
+        }
+        row = { ...row, preChecked: true };
+      }
+
       if (row.outcome === 'pending') {
-        const from = row.lastTrackedAt ?? row.frozenAt!;
+        // Never earlier than first seen, so a backfill only covers time after we saw the signal live.
+        const from = Math.max(row.lastTrackedAt ?? row.frozenAt!, row.trackedFrom ?? 0);
         const minutes = await deps.candles.provider.getMinuteBars(row.ticker, new Date(from * 1000), new Date(now * 1000));
         const trading = timeframeCandles(await deps.candles.get15m(row.ticker))[row.tradingTimeframe];
         const close = deps.calendar().find((d) => d.date === row.expiration)?.close ?? '16:00';
