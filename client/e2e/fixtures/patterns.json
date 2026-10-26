@@ -942,6 +942,244 @@
    ]
   },
   {
+   "ticker": "CONF",
+   "price": 108.6,
+   "delayedPrice": 108.6,
+   "emaTable": [],
+   "contracts": [],
+   "bestStatus": "WATCH",
+   "patterns": [
+    {
+     "key": "CONF|bull",
+     "type": "bull_flag",
+     "direction": "bullish",
+     "timeframes": [
+      "15m"
+     ],
+     "tradingTimeframe": "15m",
+     "state": "triggered",
+     "status": "WATCH",
+     "lowerQuality": false,
+     "triggerTime": 1792790100,
+     "triggerLevel": 108.25,
+     "invalidation": 104,
+     "targets": [
+      {
+       "kind": "pattern",
+       "label": "Pattern target",
+       "price": 116.75
+      }
+     ],
+     "candleLabels": [
+      {
+       "time": 1792787400,
+       "names": [],
+       "bias": "none"
+      },
+      {
+       "time": 1792788300,
+       "names": [],
+       "bias": "none"
+      },
+      {
+       "time": 1792789200,
+       "names": [
+        "boom_boom"
+       ],
+       "bias": "bullish"
+      }
+     ],
+     "drawings": {
+      "15m": {
+       "points": [
+        {
+         "label": "pole_start",
+         "index": 16,
+         "time": 1792776600,
+         "price": 99.75
+        },
+        {
+         "label": "pole_end",
+         "index": 25,
+         "time": 1792784700,
+         "price": 108.25
+        },
+        {
+         "label": "flag_extreme",
+         "index": 29,
+         "time": 1792788300,
+         "price": 105.75
+        }
+       ],
+       "lines": [
+        {
+         "label": "pole",
+         "from": {
+          "time": 1792776600,
+          "price": 99.75
+         },
+         "to": {
+          "time": 1792784700,
+          "price": 108.25
+         }
+        },
+        {
+         "label": "trigger",
+         "from": {
+          "time": 1792785600,
+          "price": 108.25
+         },
+         "to": {
+          "time": 1792789200,
+          "price": 108.25
+         }
+        },
+        {
+         "label": "target",
+         "from": {
+          "time": 1792784700,
+          "price": 116.75
+         },
+         "to": {
+          "time": 1792789200,
+          "price": 116.75
+         }
+        }
+       ]
+      }
+     },
+     "horizonExpiration": null,
+     "dailyEmasInPath": [],
+     "ema55Reversal": null,
+     "contract": {
+      "none": "no contract fits",
+      "skippedExpirations": []
+     },
+     "conflict": {
+      "with": [
+       "double_top"
+      ],
+      "timeframes": [
+       "15m"
+      ]
+     }
+    },
+    {
+     "key": "CONF|top",
+     "type": "double_top",
+     "direction": "bearish",
+     "timeframes": [
+      "15m"
+     ],
+     "tradingTimeframe": "15m",
+     "state": "armed",
+     "status": "WATCH",
+     "lowerQuality": false,
+     "triggerTime": null,
+     "triggerLevel": 104.75,
+     "invalidation": 110.25,
+     "targets": [
+      {
+       "kind": "pattern",
+       "label": "Pattern target",
+       "price": 99.25
+      }
+     ],
+     "candleLabels": [
+      {
+       "time": 1792801800,
+       "names": [],
+       "bias": "none"
+      },
+      {
+       "time": 1792802700,
+       "names": [],
+       "bias": "none"
+      },
+      {
+       "time": 1792803600,
+       "names": [],
+       "bias": "none"
+      }
+     ],
+     "drawings": {
+      "15m": {
+       "points": [
+        {
+         "label": "peak_1",
+         "index": 20,
+         "time": 1792780200,
+         "price": 110.25
+        },
+        {
+         "label": "dip",
+         "index": 30,
+         "time": 1792789200,
+         "price": 104.75
+        },
+        {
+         "label": "peak_2",
+         "index": 40,
+         "time": 1792798200,
+         "price": 110.25
+        }
+       ],
+       "lines": [
+        {
+         "label": "peaks",
+         "from": {
+          "time": 1792780200,
+          "price": 110.25
+         },
+         "to": {
+          "time": 1792798200,
+          "price": 110.25
+         }
+        },
+        {
+         "label": "trigger",
+         "from": {
+          "time": 1792780200,
+          "price": 104.75
+         },
+         "to": {
+          "time": 1792803600,
+          "price": 104.75
+         }
+        },
+        {
+         "label": "target",
+         "from": {
+          "time": 1792798200,
+          "price": 99.25
+         },
+         "to": {
+          "time": 1792803600,
+          "price": 99.25
+         }
+        }
+       ]
+      }
+     },
+     "horizonExpiration": null,
+     "dailyEmasInPath": [],
+     "ema55Reversal": null,
+     "contract": {
+      "none": "no contract fits",
+      "skippedExpirations": []
+     },
+     "conflict": {
+      "with": [
+       "bull_flag"
+      ],
+      "timeframes": [
+       "15m"
+      ]
+     }
+    }
+   ]
+  },
+  {
    "ticker": "NONE",
    "price": 100.5,
    "delayedPrice": 100.5,
@@ -5290,6 +5528,457 @@
        "to": {
         "time": 1792800000,
         "price": 101.75
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "CONF": {
+   "ticker": "CONF",
+   "timeframe": "15m",
+   "candles": [
+    {
+     "time": 1792762200,
+     "open": 100,
+     "high": 100.25,
+     "low": 99.75,
+     "close": 100,
+     "volume": 1000
+    },
+    {
+     "time": 1792763100,
+     "open": 100,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792764000,
+     "open": 100.5,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 101,
+     "volume": 1000
+    },
+    {
+     "time": 1792764900,
+     "open": 101,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792765800,
+     "open": 100.5,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100,
+     "volume": 1000
+    },
+    {
+     "time": 1792766700,
+     "open": 100,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792767600,
+     "open": 100.5,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 101,
+     "volume": 1000
+    },
+    {
+     "time": 1792768500,
+     "open": 101,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792769400,
+     "open": 100.5,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100,
+     "volume": 1000
+    },
+    {
+     "time": 1792770300,
+     "open": 100,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792771200,
+     "open": 100.5,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 101,
+     "volume": 1000
+    },
+    {
+     "time": 1792772100,
+     "open": 101,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792773000,
+     "open": 100.5,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100,
+     "volume": 1000
+    },
+    {
+     "time": 1792773900,
+     "open": 100,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792774800,
+     "open": 100.5,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 101,
+     "volume": 1000
+    },
+    {
+     "time": 1792775700,
+     "open": 101,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792776600,
+     "open": 100.5,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100,
+     "volume": 1000
+    },
+    {
+     "time": 1792777500,
+     "open": 100,
+     "high": 100.75,
+     "low": 99.75,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792778400,
+     "open": 100.5,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 101,
+     "volume": 1000
+    },
+    {
+     "time": 1792779300,
+     "open": 101,
+     "high": 101.25,
+     "low": 100.25,
+     "close": 100.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792780200,
+     "open": 100.5,
+     "high": 102,
+     "low": 100.25,
+     "close": 101.75,
+     "volume": 1000
+    },
+    {
+     "time": 1792781100,
+     "open": 101.75,
+     "high": 103.25,
+     "low": 101.5,
+     "close": 103,
+     "volume": 1000
+    },
+    {
+     "time": 1792782000,
+     "open": 103,
+     "high": 104.5,
+     "low": 102.75,
+     "close": 104.25,
+     "volume": 1000
+    },
+    {
+     "time": 1792782900,
+     "open": 104.25,
+     "high": 105.75,
+     "low": 104,
+     "close": 105.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792783800,
+     "open": 105.5,
+     "high": 107,
+     "low": 105.25,
+     "close": 106.75,
+     "volume": 1000
+    },
+    {
+     "time": 1792784700,
+     "open": 106.75,
+     "high": 108.25,
+     "low": 106.5,
+     "close": 108,
+     "volume": 1000
+    },
+    {
+     "time": 1792785600,
+     "open": 108,
+     "high": 108.25,
+     "low": 107.25,
+     "close": 107.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792786500,
+     "open": 107.5,
+     "high": 107.75,
+     "low": 106.75,
+     "close": 107,
+     "volume": 1000
+    },
+    {
+     "time": 1792787400,
+     "open": 107,
+     "high": 107.25,
+     "low": 106.25,
+     "close": 106.5,
+     "volume": 1000
+    },
+    {
+     "time": 1792788300,
+     "open": 106.5,
+     "high": 106.75,
+     "low": 105.75,
+     "close": 106,
+     "volume": 1000
+    },
+    {
+     "time": 1792789200,
+     "open": 106,
+     "high": 108.8,
+     "low": 105.9,
+     "close": 108.6,
+     "volume": 1000
+    }
+   ],
+   "ema": {
+    "13": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     100.46153846153847,
+     100.46703296703298,
+     100.5431711145997,
+     100.53700381251404,
+     100.4602889821549,
+     100.46596198470422,
+     100.54225312974648,
+     100.53621696835414,
+     100.70961454430355,
+     101.0368124665459,
+     101.49583925703934,
+     102.06786222031944,
+     102.7367390459881,
+     103.48863346798981,
+     104.06168582970557,
+     104.4814449968905,
+     104.76980999733472,
+     104.9455514262869,
+     105.46761550824593
+    ],
+    "48": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "55": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ],
+    "200": [
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "patterns": [
+    {
+     "key": "BULLF|bull_flag|bullish|1792776600",
+     "type": "bull_flag",
+     "direction": "bullish",
+     "status": "WATCH",
+     "points": [
+      {
+       "label": "pole_start",
+       "index": 16,
+       "time": 1792776600,
+       "price": 99.75
+      },
+      {
+       "label": "pole_end",
+       "index": 25,
+       "time": 1792784700,
+       "price": 108.25
+      },
+      {
+       "label": "flag_extreme",
+       "index": 29,
+       "time": 1792788300,
+       "price": 105.75
+      }
+     ],
+     "lines": [
+      {
+       "label": "pole",
+       "from": {
+        "time": 1792776600,
+        "price": 99.75
+       },
+       "to": {
+        "time": 1792784700,
+        "price": 108.25
+       }
+      },
+      {
+       "label": "trigger",
+       "from": {
+        "time": 1792785600,
+        "price": 108.25
+       },
+       "to": {
+        "time": 1792789200,
+        "price": 108.25
+       }
+      },
+      {
+       "label": "target",
+       "from": {
+        "time": 1792784700,
+        "price": 116.75
+       },
+       "to": {
+        "time": 1792789200,
+        "price": 116.75
        }
       }
      ]

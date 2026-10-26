@@ -89,6 +89,21 @@ describe('applyScan', () => {
   });
 });
 
+describe('conflicts in history', () => {
+  const conflict = { with: ['double_top'], timeframes: ['15m'] };
+  it('logs a conflict event when a conflict starts, a cleared event when it ends, nothing while unchanged', () => {
+    const first = applyScan(null, snap({ conflict }), NOW);
+    expect(first.row.conflicting).toBe(true);
+    expect(first.events.map((e) => [e.kind, e.to])).toEqual([['first_seen', 'WATCH'], ['conflict', 'double_top']]);
+    expect(first.events[1]!.detail).toEqual(conflict);
+    const same = applyScan(first.row, snap({ conflict }), NOW + 120);
+    expect(same.events).toEqual([]);
+    const cleared = applyScan(same.row, snap({ conflict: null }), NOW + 240);
+    expect(cleared.row.conflicting).toBe(false);
+    expect(cleared.events.map((e) => e.kind)).toEqual(['conflict_cleared']);
+  });
+});
+
 describe('endMissing', () => {
   it('a never-triggered signal that disappears → ended + never_triggered', () => {
     const row = applyScan(null, snap(), NOW).row;

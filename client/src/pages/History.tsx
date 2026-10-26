@@ -245,6 +245,11 @@ function eventText(e: HistorySignal['events'][number]): string {
     case 'exit_quote': return e.to === 'ok' ? `Exit quote: bid ${money(d.bid as number)}, ask ${money(d.ask as number)} (indicative)` : 'Exit quote missed';
     case 'backfill': return `Backfilled after downtime (${etDateTime(Number(e.from))} → ${etDateTime(Number(e.to))})`;
     case 'ended': return `Ended (${(d.outcome as string) ?? ''})`;
+    case 'conflict': {
+      const c = d as { with?: string[]; timeframes?: string[] };
+      return `Conflicting signals: opposite ${(c.with ?? []).map((t) => patternLabel(t).toLowerCase()).join(', ')} on ${(c.timeframes ?? []).join(', ')}; held at WATCH`;
+    }
+    case 'conflict_cleared': return 'Conflict cleared';
     case 'reevaluated':
       return e.from === e.to
         ? `Re-checked under first-seen tracking: ${OUTCOME_TEXT[e.to as Outcome] ?? e.to} stands (${String(d.reason ?? '')})`

@@ -92,6 +92,7 @@ Do NOT substitute generic indicators (RSI, MACD, Bollinger, etc.) or invent stra
   - Half days: liquid windows = 9:30–11:30 plus the final hour before the early close. A 10-minute wait never skips past the start of a liquid window.
   - Status: WAIT = newest candle doji/spinning top. WATCH = pattern armed, or triggered but candle bias doesn't match. READY = triggered + bias matches. AT ENTRY = READY + contract ask in the entry zone (current session). No contract → status stands, card says "no contract fits".
   - "Lower quality" badge is decided by the trigger candle's close time; armed signals get no badge.
+  - Conflicting signals (decided): when a ticker has opposite-direction patterns detected on the same time frame (e.g. a 15m bull flag and a 15m double top), both are shown with a "Conflicting signals" badge and capped at WATCH (never READY or AT ENTRY) while the conflict exists. The conflict is logged in history when it starts ("conflict") and when it clears ("conflict_cleared"). Same-direction patterns, and opposite-direction patterns on different time frames, are not affected.
   - Market closed: read-only last results with a "market closed — last session" banner. If nothing is saved yet, run one scan of the last session at startup.
   - Grouping: one entry per ticker with its patterns under it; a contract shared by several patterns is shown once.
   - Rate limits: request queue per provider (Alpaca ≤ 180/min, Finnhub ≤ 55/min); candles cached (15m incremental, daily/expirations/earnings/open interest once per day).

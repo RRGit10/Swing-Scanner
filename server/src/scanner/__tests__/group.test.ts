@@ -7,7 +7,7 @@ function pattern(over: Partial<PatternEntry>): Omit<PatternEntry, 'contract'> {
   return {
     key: 'k', type: 'double_top', direction: 'bearish', timeframes: ['15m'], tradingTimeframe: '15m', state: 'armed',
     status: 'WATCH', lowerQuality: false, triggerTime: null, triggerLevel: 1, invalidation: 2, targets: [], candleLabels: [],
-    drawings: {}, horizonExpiration: null, dailyEmasInPath: [], ema55Reversal: null, ...over,
+    drawings: {}, horizonExpiration: null, dailyEmasInPath: [], ema55Reversal: null, conflict: null, ...over,
   };
 }
 
@@ -40,6 +40,17 @@ describe('buildTickerEntry', () => {
     ]);
     expect(entry.contracts).toHaveLength(2);
     expect(entry.patterns.find((p) => p.key === 'c')!.contract).toEqual({ none: 'no contract fits', skippedExpirations: none.skippedExpirations });
+  });
+});
+
+describe('buildTickerEntry: conflicts', () => {
+  it('caps conflicting patterns before choosing the ticker\'s best status', () => {
+    const entry = buildTickerEntry({ ticker: 'META', price: 640, delayedPrice: 640, emaTable: [] }, [
+      { pattern: pattern({ key: 'f', type: 'bull_flag', direction: 'bullish', status: 'AT ENTRY' }), result: pick(640) },
+      { pattern: pattern({ key: 'd', type: 'double_top', direction: 'bearish', status: 'READY' }), result: pick(630) },
+    ]);
+    expect(entry.bestStatus).toBe('WATCH');
+    expect(entry.patterns.every((x) => x.conflict != null && x.status === 'WATCH')).toBe(true);
   });
 });
 

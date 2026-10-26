@@ -20,6 +20,11 @@ export function triggerText(p: PatternEntry): string {
 export function PatternBadges({ p, tf = p.tradingTimeframe }: { p: PatternEntry; tf?: IntradayTf }) {
   return (
     <>
+      {p.conflict && (
+        <Badge tone="warn" title={`Opposite-direction ${p.conflict.with.map((t) => patternLabel(t).toLowerCase()).join(', ')} on ${p.conflict.timeframes.join(', ')}. Held at WATCH while both are valid.`}>
+          Conflicting signals
+        </Badge>
+      )}
       {!isClassMethod(p.type) && (
         <Badge tone="warn" title="Added as a mirror of a class pattern; not part of the class method">
           Not from the class method

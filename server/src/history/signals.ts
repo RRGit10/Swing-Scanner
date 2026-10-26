@@ -33,6 +33,8 @@ export interface SignalSnapshot {
   horizonExpiration: string | null;
   /** settings version in force for this scan */
   settingsVersion: number;
+  /** opposite-direction pattern(s) on the same time frame */
+  conflict?: { with: string[]; timeframes: string[] } | null;
 }
 
 export interface SignalRow {
@@ -79,10 +81,12 @@ export interface SignalRow {
   endedReason: string | null;
   /** settings version in force when first seen */
   settingsVersion: number;
+  /** currently in conflict with an opposite-direction pattern on the same time frame */
+  conflicting: boolean;
 }
 
 export interface SignalEvent {
-  kind: 'first_seen' | 'status' | 'contract' | 'triggered' | 'ended' | 'reappeared' | 'outcome' | 'exit_quote' | 'backfill' | 'reevaluated';
+  kind: 'first_seen' | 'status' | 'contract' | 'triggered' | 'ended' | 'reappeared' | 'outcome' | 'exit_quote' | 'backfill' | 'reevaluated' | 'conflict' | 'conflict_cleared';
   at: number;
   from: string | null;
   to: string | null;
@@ -106,6 +110,7 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
     invalidation: cur.invalidation,
     targets: cur.targets,
     contractSymbol: cur.contract?.symbol ?? null,
+    conflicting: cur.conflict != null,
   };
 
   let row: SignalRow;
@@ -128,6 +133,10 @@ export function applyScan(prev: SignalRow | null, cur: SignalSnapshot, now: numb
     if (prev.status !== cur.status) events.push(event('status', now, prev.status, cur.status));
     if (prev.contractSymbol !== row.contractSymbol) events.push(event('contract', now, prev.contractSymbol, row.contractSymbol));
   }
+
+  // Conflict with an opposite-direction pattern on the same time frame: logged when it starts and when it clears.
+  if (row.conflicting && !prev?.conflicting) events.push(event('conflict', now, null, cur.conflict!.with.join(', '), cur.conflict));
+  if (!row.conflicting && prev?.conflicting) events.push(event('conflict_cleared', now, null, null));
 
   if (cur.state === 'triggered' && row.frozenAt == null) {
     // Frozen when we see the trigger; judged only from when we could have acted on it.

@@ -10,6 +10,7 @@ import * as fx from '../src/analysis/__fixtures__/patterns.js';
 import * as dg from '../src/analysis/__fixtures__/diagrams.js';
 import { classifyLastThree, DEFAULT_CANDLE_SETTINGS } from '../src/analysis/candles.js';
 import { emaSet } from '../src/analysis/ema.js';
+import { applyConflicts } from '../src/scanner/conflicts.js';
 import { detectPatterns } from '../src/analysis/patterns/index.js';
 import type { PatternType } from '../src/analysis/patterns/types.js';
 import type { Candle } from '../src/providers/types.js';
@@ -49,6 +50,13 @@ for (const [ticker, type, candles] of CASES) {
     patterns: [{ key, type: m.type, direction: m.direction, status: 'WATCH', points: m.points, lines: m.lines }],
   };
 }
+
+// A ticker with opposite-direction patterns on the same time frame (like META 15m bull flag + double top).
+const bull = tickers.find((t) => t.ticker === 'BULLF')!.patterns[0]!;
+const top = tickers.find((t) => t.ticker === 'DTOP')!.patterns[0]!;
+const conflicted = applyConflicts([{ ...bull, key: 'CONF|bull', status: 'READY' }, { ...top, key: 'CONF|top' }] as never);
+tickers.push({ ticker: 'CONF', price: 108.6, delayedPrice: 108.6, emaTable: [], contracts: [], bestStatus: 'WATCH', patterns: conflicted as never });
+charts.CONF = { ...(charts.BULLF as object), ticker: 'CONF' };
 
 // A ticker with no pattern: candles and EMAs only.
 const quiet = fx.candlesOf(fx.ZIGZAG);

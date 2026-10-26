@@ -191,7 +191,7 @@ async function routeFixtures(page: Page, tickers: unknown[] = fixtures.tickers) 
 }
 
 test.describe('pattern shapes (fixtures)', () => {
-  for (const { ticker } of fixtures.tickers.filter((t) => t.patterns.length)) {
+  for (const { ticker } of fixtures.tickers.filter((t) => t.patterns.length && t.ticker !== 'CONF')) {
     test(`${ticker}: shape drawn, no point labels, no console errors`, async ({ page }, info) => {
       await routeFixtures(page);
       const errors = await open(page, `/#/t/${ticker}`);
@@ -204,6 +204,15 @@ test.describe('pattern shapes (fixtures)', () => {
       expect(errors).toEqual([]);
     });
   }
+});
+
+test('conflict: opposite-direction patterns on the same time frame show "Conflicting signals" and stay at WATCH', async ({ page }) => {
+  await routeFixtures(page);
+  await open(page, '/#/');
+  const card = page.locator('section[aria-labelledby="t-CONF"]');
+  await expect(card.getByText('Conflicting signals')).toHaveCount(2);
+  await expect(card.locator('article span[title]').filter({ hasText: /^(READY|AT ENTRY)$/ })).toHaveCount(0);
+  await expect(card.locator('article span[title]').filter({ hasText: /^WATCH$/ })).toHaveCount(2);
 });
 
 test.describe('display rule: patterns are drawn only when detected', () => {

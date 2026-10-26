@@ -71,6 +71,7 @@ const MIGRATIONS: [table: string, column: string, ddl: string][] = [
   ['signals', 'settings_version', 'ALTER TABLE signals ADD COLUMN settings_version INTEGER NOT NULL DEFAULT 1'],
   ['signals', 'tracked_from', 'ALTER TABLE signals ADD COLUMN tracked_from INTEGER'],
   ['signals', 'pre_checked', 'ALTER TABLE signals ADD COLUMN pre_checked INTEGER NOT NULL DEFAULT 0'],
+  ['signals', 'conflicting', 'ALTER TABLE signals ADD COLUMN conflicting INTEGER NOT NULL DEFAULT 0'],
 ];
 
 /** camelCase row field → column. JSON fields are (de)serialized; booleans stored as 0/1. */
@@ -85,7 +86,7 @@ const COLUMNS: [keyof SignalRow, string, 'json' | 'bool' | 'plain'][] = [
   ['outcome', 'outcome', 'plain'], ['outcomeAt', 'outcome_at', 'plain'], ['exitBid', 'exit_bid', 'plain'], ['exitAsk', 'exit_ask', 'plain'],
   ['exitQuoteTime', 'exit_quote_time', 'plain'], ['exitNote', 'exit_note', 'plain'], ['gainPct', 'gain_pct', 'plain'],
   ['endedAt', 'ended_at', 'plain'], ['endedReason', 'ended_reason', 'plain'], ['settingsVersion', 'settings_version', 'plain'],
-  ['trackedFrom', 'tracked_from', 'plain'], ['preChecked', 'pre_checked', 'bool'],
+  ['trackedFrom', 'tracked_from', 'plain'], ['preChecked', 'pre_checked', 'bool'], ['conflicting', 'conflicting', 'bool'],
 ];
 
 export interface SavedScan {

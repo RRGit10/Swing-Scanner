@@ -216,6 +216,7 @@ function toSnapshot(entry: TickerEntry, p: PatternEntry, settingsVersion: number
     targets: p.targets,
     contract: pick ? { symbol: pick.contract.symbol, ask: pick.contract.ask, expiration: pick.expiration } : null,
     horizonExpiration: p.horizonExpiration,
+    conflict: p.conflict,
     settingsVersion,
   };
 }

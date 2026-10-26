@@ -5,6 +5,7 @@ import type { Target } from '../analysis/targets.js';
 import type { Direction } from '../analysis/types.js';
 import type { ContractPick, ContractResult, ExitPlan, SkippedExpiration } from '../contracts/types.js';
 import type { IntradayTimeframe } from '../providers/types.js';
+import { applyConflicts } from './conflicts.js';
 import { statusRank, type SignalStatus } from './status.js';
 
 export type PatternContract =
@@ -34,6 +35,8 @@ export interface PatternEntry {
   dailyEmasInPath: EmaLevel[];
   /** 55 EMA reversal in the pattern's direction within the last 3 candles of the trading chart */
   ema55Reversal: { time: number } | null;
+  /** opposite-direction pattern(s) on the same time frame: status capped at WATCH while this is set */
+  conflict: { with: string[]; timeframes: IntradayTimeframe[] } | null;
   /** the shared contract is listed once under the ticker; each pattern keeps its own exit plan */
   contract: PatternContract;
 }
@@ -54,20 +57,21 @@ export interface TickerEntry {
 /** One entry per ticker: patterns sorted by status, each distinct contract listed once. */
 export function buildTickerEntry(
   base: Pick<TickerEntry, 'ticker' | 'price' | 'delayedPrice' | 'emaTable'>,
-  items: { pattern: Omit<PatternEntry, 'contract'>; result: ContractResult }[],
+  items: { pattern: Omit<PatternEntry, 'contract' | 'conflict'> & { conflict?: PatternEntry['conflict'] }; result: ContractResult }[],
 ): TickerEntry {
   const contracts = new Map<string, ContractPick>();
-  const patterns: PatternEntry[] = items.map(({ pattern, result }) => {
+  const listed: PatternEntry[] = items.map(({ pattern, result }) => {
     if (result.kind === 'none') {
-      return { ...pattern, contract: { none: result.reason, skippedExpirations: result.skippedExpirations } };
+      return { ...pattern, conflict: null, contract: { none: result.reason, skippedExpirations: result.skippedExpirations } };
     }
     if (!contracts.has(result.contract.symbol)) contracts.set(result.contract.symbol, result);
     return {
       ...pattern,
+      conflict: null,
       contract: { symbol: result.contract.symbol, exitPlan: result.exitPlan, skippedExpirations: result.skippedExpirations },
     };
   });
-  patterns.sort((a, b) => statusRank(a.status) - statusRank(b.status));
+  const patterns = applyConflicts(listed).sort((a, b) => statusRank(a.status) - statusRank(b.status));
   return { ...base, patterns, contracts: [...contracts.values()], bestStatus: patterns[0]?.status ?? null };
 }
 

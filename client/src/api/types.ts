@@ -49,6 +49,8 @@ export interface PatternEntry {
   /** added in phase 6; absent in scans saved earlier */
   dailyEmasInPath?: EmaLevel[];
   ema55Reversal?: { time: number } | null;
+  /** opposite-direction pattern(s) on the same time frame; status is capped at WATCH while set */
+  conflict?: { with: string[]; timeframes: IntradayTf[] } | null;
   contract: PatternContract;
 }
 export interface TickerEntry {
