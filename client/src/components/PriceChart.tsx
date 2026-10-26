@@ -3,24 +3,35 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
-  createSeriesMarkers,
   LineSeries,
   LineStyle,
   TickMarkType,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
-  type ISeriesMarkersPluginApi,
-  type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import type { ChartPayload, PatternEntry } from '../api/types';
+import { PatternShapes } from '../chart/PatternShapes';
+import { buildPatternDrawing, candleTags } from '../chart/shapes';
 
 const EMA_PERIODS = ['13', '48', '55', '200'] as const;
-const OVERLAY_LINES = new Set(['neckline', 'pole', 'peaks']);
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const rgb = (hex: string) => {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? [...h].map((c) => c + c).join('') : h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as const;
+};
+const withAlpha = (hex: string, a: number) => `rgba(${rgb(hex).join(', ')}, ${a})`;
+/** Opaque blend of `tint` over `base` (tag backgrounds that stay readable over lines). */
+const blend = (base: string, tint: string, t: number) => {
+  const a = rgb(base);
+  const b = rgb(tint);
+  return `rgb(${a.map((v, i) => Math.round(v + (b[i]! - v) * t)).join(', ')})`;
+};
 
 // Display-only time zone: data keeps real UTC timestamps; formatters show New York time (per the
 // lightweight-charts skill: pre-shifting timestamps changes chart semantics). Daily bars are stamped
@@ -61,22 +72,22 @@ interface ChartRefs {
   chart: IChartApi;
   candles: ISeriesApi<'Candlestick'>;
   emas: Record<(typeof EMA_PERIODS)[number], ISeriesApi<'Line'>>;
-  markers: ISeriesMarkersPluginApi<Time>;
-  overlays: ISeriesApi<'Line'>[];
+  shapes: PatternShapes;
   levels: IPriceLine[];
   /** price range of the pattern's levels, read by the (cheap) autoscale provider */
   levelRange: { min: number; max: number } | null;
 }
 
 /**
- * Candles + 13/48/55/200 EMAs + the selected pattern: key points as markers, neckline/pole/peaks as
- * lines, trigger/targets/invalidation as labeled price levels, and the last-3-candle labels.
- * The chart is created once; data, overlays and colors update in place.
+ * Candles + 13/48/55/200 EMAs + the selected pattern drawn as its shape (a series primitive), with
+ * trigger/targets/invalidation as labeled price levels and short tags for the last 3 candles.
+ * The chart is created once; data, shapes and colors update in place.
  */
 export function PriceChart({ chart: data, pattern }: { chart: ChartPayload; pattern: PatternEntry | null }) {
   const host = useRef<HTMLDivElement>(null);
   const refs = useRef<ChartRefs | null>(null);
   const scheme = useColorScheme();
+  const [summary, setSummary] = useState('');
 
   // Create once.
   useEffect(() => {
@@ -102,15 +113,14 @@ export function PriceChart({ chart: data, pattern }: { chart: ChartPayload; patt
         },
       }),
       emas: {} as ChartRefs['emas'],
-      markers: null as unknown as ISeriesMarkersPluginApi<Time>,
-      overlays: [],
+      shapes: new PatternShapes(),
       levels: [],
       levelRange: null,
     };
     for (const p of EMA_PERIODS) {
       r.emas[p] = chart.addSeries(LineSeries, { lineWidth: p === '55' ? 2 : 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, title: p });
     }
-    r.markers = createSeriesMarkers(r.candles, []);
+    r.candles.attachPrimitive(r.shapes);
     refs.current = r;
     return () => {
       refs.current = null;
@@ -137,7 +147,7 @@ export function PriceChart({ chart: data, pattern }: { chart: ChartPayload; patt
     r.chart.timeScale().setVisibleLogicalRange({ from, to: n + 4 });
   }, [data, pattern]);
 
-  // Colors, pattern overlays, levels and markers (rebuilt on data, pattern or theme change).
+  // Colors, pattern shape, price levels and candle tags (rebuilt on data, pattern or theme change).
   useEffect(() => {
     const r = refs.current;
     if (!r) return;
@@ -145,10 +155,12 @@ export function PriceChart({ chart: data, pattern }: { chart: ChartPayload; patt
     const short = css('--short');
     const ink3 = css('--ink-3');
     const rule = css('--rule');
+    const surface = css('--surface');
     const dirColor = pattern?.direction === 'bearish' ? short : long;
+    const dark = scheme === 'dark';
 
     r.chart.applyOptions({
-      layout: { background: { type: ColorType.Solid, color: css('--surface') }, textColor: css('--ink-2') },
+      layout: { background: { type: ColorType.Solid, color: surface }, textColor: css('--ink-2') },
       grid: { vertLines: { color: `${rule}55` }, horzLines: { color: `${rule}55` } },
       rightPriceScale: { borderColor: rule },
       timeScale: { borderColor: rule },
@@ -156,13 +168,12 @@ export function PriceChart({ chart: data, pattern }: { chart: ChartPayload; patt
     r.candles.applyOptions({ upColor: long, downColor: short, wickUpColor: long, wickDownColor: short });
     for (const p of EMA_PERIODS) r.emas[p].applyOptions({ color: css(`--ema-${p}`) });
 
-    for (const s of r.overlays) r.chart.removeSeries(s);
     for (const l of r.levels) r.candles.removePriceLine(l);
-    r.overlays = [];
     r.levels = [];
     r.levelRange = null;
 
-    const drawing = pattern ? data.patterns.find((p) => p.key === pattern.key) : undefined;
+    const points = pattern && data.timeframe !== '1d' ? data.patterns.find((p) => p.key === pattern.key)?.points : undefined;
+    const drawing = pattern && points ? buildPatternDrawing({ candles: data.candles, points, pattern }) : null;
     if (pattern && drawing) {
       const levels = [
         { price: pattern.triggerLevel, color: css('--amber'), style: LineStyle.Dashed, title: 'Trigger' },
@@ -172,39 +183,34 @@ export function PriceChart({ chart: data, pattern }: { chart: ChartPayload; patt
       r.levels = levels.map((l) => r.candles.createPriceLine({ price: l.price, color: l.color, lineStyle: l.style, lineWidth: 1, axisLabelVisible: true, title: l.title }));
       const prices = levels.map((l) => l.price);
       r.levelRange = { min: Math.min(...prices), max: Math.max(...prices) };
-
-      for (const line of drawing.lines.filter((l) => OVERLAY_LINES.has(l.label))) {
-        if (line.from.time >= line.to.time) continue; // two strictly ascending points
-        const s = r.chart.addSeries(LineSeries, {
-          color: dirColor, lineWidth: 2, lineStyle: line.label === 'peaks' ? LineStyle.Dashed : LineStyle.Solid,
-          priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-        });
-        s.setData([{ time: line.from.time as UTCTimestamp, value: line.from.price }, { time: line.to.time as UTCTimestamp, value: line.to.price }]);
-        r.overlays.push(s);
-      }
     }
 
-    // Markers must sit on existing candle times (key points and candle labels both do).
-    const byTime = new Map(data.candles.map((k) => [k.time, k]));
-    const markers: SeriesMarker<Time>[] = [];
-    for (const pt of drawing?.points ?? []) {
-      const k = byTime.get(pt.time);
-      if (!k) continue;
-      markers.push({ time: pt.time as UTCTimestamp, position: pt.price >= (k.high + k.low) / 2 ? 'aboveBar' : 'belowBar', shape: 'circle', color: dirColor, text: pt.label.replaceAll('_', ' ') });
-    }
-    if (pattern && data.timeframe === pattern.tradingTimeframe) {
-      for (const l of pattern.candleLabels) {
-        if (!l.names.length || !byTime.has(l.time)) continue;
-        const bull = l.bias === 'bullish';
-        const bear = l.bias === 'bearish';
-        markers.push({
-          time: l.time as UTCTimestamp, position: bull ? 'belowBar' : 'aboveBar', shape: bull ? 'arrowUp' : bear ? 'arrowDown' : 'square',
-          color: bull ? long : bear ? short : ink3, text: l.names.join(' + ').replaceAll('_', ' '),
-        });
-      }
-    }
-    r.markers.setMarkers(markers.sort((a, b) => (a.time as number) - (b.time as number)));
+    const tags = pattern && data.timeframe === pattern.tradingTimeframe ? candleTags(pattern.candleLabels, data.candles) : [];
+    r.shapes.setData({
+      drawing,
+      candleTags: tags,
+      candles: data.candles,
+      emas: EMA_PERIODS.map((p) => data.ema[p]),
+      levels: pattern && drawing ? [pattern.triggerLevel, ...pattern.targets.map((t) => t.price), pattern.invalidation] : [],
+      style: {
+        stroke: dirColor,
+        fill: withAlpha(dirColor, dark ? 0.18 : 0.12),
+        tagFill: blend(surface, dirColor, dark ? 0.28 : 0.16),
+        candleTagFill: surface,
+        candleTagBorder: ink3,
+        text: css('--ink'),
+      },
+    });
+    const candleText = tags.length ? ` Candle tags: ${tags.map((t) => t.text).join(', ')}.` : '';
+    setSummary(drawing ? `${drawing.summary}${candleText}` : pattern ? `${pattern.type.replaceAll('_', ' ')} is not drawn on this time frame.${candleText}` : '');
   }, [data, pattern, scheme]);
 
-  return <div ref={host} className="h-[420px] w-full md:h-[520px]" data-testid="price-chart" />;
+  return (
+    <>
+      <div ref={host} className="h-[420px] w-full md:h-[520px]" data-testid="price-chart" />
+      <p className="sr-only" data-testid="pattern-drawing" aria-live="polite">
+        {summary}
+      </p>
+    </>
+  );
 }

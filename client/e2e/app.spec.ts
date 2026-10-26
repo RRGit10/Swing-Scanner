@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import fixtures from './fixtures/patterns.json' with { type: 'json' };
 
 // Runs against a read-only copy of the scanner database (see playwright.config.ts): no scans, no tracking.
 const DISCLAIMER = 'Educational screener based on a class method, not financial advice. Verify every quote in your broker before trading.';
@@ -109,6 +110,8 @@ test('detail: chart with EMAs and the pattern, last-3 candle labels, EMA table, 
   // TradingView attribution (lightweight-charts license)
   await expect(chart.locator('a[href^="https://www.tradingview.com/"]')).toBeVisible();
   await expect(page.getByText('EMA 55')).toBeVisible();
+  // the pattern is drawn as its shape on its trading chart
+  await expect(page.getByTestId('pattern-drawing')).toHaveText(/drawn: .+\. Tags: .+\./);
   await expect(page.getByText(/Last 3 candles on/)).toBeVisible();
   await expect(page.locator('table caption', { hasText: 'EMA levels' })).toBeVisible();
   await expect(page.locator('tbody tr th[scope="row"]')).toHaveText(['15m', '30m', '1h', 'Daily']);
@@ -161,4 +164,33 @@ test('settings: invalid input is explained, a save makes a new version, reset re
   await page.getByRole('alert').getByRole('button', { name: 'Reset to defaults' }).click();
   await expect(page.getByRole('status')).toContainText(/Reset to the defaults as version \d+/);
   await expect(page.getByLabel('Budget per trade')).toHaveValue('500');
+});
+
+// Every v1 pattern shape, from the server's pattern fixtures (see server/scripts/e2e-fixtures.ts),
+// served in place of live data so the shapes are checked in a real browser.
+const EXPECTED: Record<string, RegExp> = {
+  BULLF: /^Bull flag drawn: pole, flag channel, arrow to T1\. Tags: Pole, Flag\./,
+  BEARF: /^Bear flag drawn: pole, flag channel, arrow to T1\. Tags: Pole, Flag\./,
+  DTOP: /^Double top drawn: M line, neckline\. Tags: Top 1, Top 2\./,
+  CUPH: /^Cup and handle drawn: cup curve, handle box, neckline\. Tags: Cup, Handle\./,
+  IHS: /^Inverse head and shoulders drawn: shoulders and head, neckline\. Tags: LS, Head, RS\./,
+};
+
+test.describe('pattern shapes (fixtures)', () => {
+  for (const { ticker } of fixtures.tickers) {
+    test(`${ticker}: shape drawn, no point labels, no console errors`, async ({ page }, info) => {
+      await page.route('**/api/signals', (r) => r.fulfill({ json: { scannedAt: 1792762200, finishedAt: 1792762204, market: 'closed', sessionDate: '2026-10-23', errors: [], tickers: fixtures.tickers } }));
+      await page.route('**/api/chart/**', (r) => {
+        const t = new URL(r.request().url()).pathname.split('/').pop()!;
+        const chart = (fixtures.charts as Record<string, unknown>)[t];
+        return chart && r.request().url().includes('tf=15m') ? r.fulfill({ json: chart }) : r.fulfill({ status: 404, json: { error: 'no chart' } });
+      });
+      const errors = await open(page, `/#/t/${ticker}`);
+      const chart = page.getByTestId('price-chart');
+      await expect(chart.locator('canvas').first()).toBeVisible();
+      await expect(page.getByTestId('pattern-drawing')).toHaveText(EXPECTED[ticker]!);
+      await chart.screenshot({ path: `e2e/screenshots/${info.project.name}/shape-${ticker}.png` });
+      expect(errors).toEqual([]);
+    });
+  }
 });
