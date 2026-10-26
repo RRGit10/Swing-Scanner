@@ -85,6 +85,20 @@ describe('ScannerLoop', () => {
     expect(signal).toMatchObject({ ticker: 'SPY', outcome: 'pending', frozenContract: expect.stringContaining('SPY'), settingsVersion: 7 });
   });
 
+  it('heartbeats scan on schedule: every 2 min in a liquid window (the 30 s heartbeat must not push the next scan back)', async () => {
+    const db = new ScannerDb(':memory:');
+    let now = MONDAY_10;
+    const loop = makeLoop(db, new SwitchableCandles(bullFlagTriggered), () => now);
+    await loop.start({ heartbeat: false });
+    const tick = () => (loop as unknown as { tick(): Promise<void> }).tick();
+    for (let t = 30; t <= 300; t += 30) {
+      now = MONDAY_10 + t;
+      await tick();
+    }
+    expect(db.latestScan()!.startedAt).toBe(MONDAY_10 + 240); // scans at 10:00, 10:02, 10:04
+    expect(loop.status().nextScanAt).toBe(MONDAY_10 + 360);
+  });
+
   it('a signal missing from a later scan is ended; a ticker that errors does not end its signals', async () => {
     const db = new ScannerDb(':memory:');
     const candles = new SwitchableCandles(bullFlagTriggered);

@@ -119,13 +119,16 @@ export class ScannerLoop {
     try {
       await this.refreshCalendar();
       const now = this.now();
-      if (this.isOpen() && (this.nextScanAt == null || now >= this.nextScanAt)) await this.scanOnce();
+      const due = this.nextScanAt == null || now >= this.nextScanAt;
+      if (this.isOpen() && due) await this.scanOnce();
       const day = this.today();
       if (day && this.postCloseTrackedFor !== day.date && now >= etToUnix(day.date, hhmmToMinutes(day.close)) + this.deps.settings().settings.scanner.postCloseTrackMin * 60) {
         this.postCloseTrackedFor = day.date;
         await this.track('post-close');
       }
-      this.plan();
+      // Re-plan only once the planned scan has passed (or after a scan); re-planning every heartbeat would keep
+      // pushing the next scan into the future, so scheduled scans would never run.
+      if (due) this.plan();
     } catch (err) {
       this.lastError = (err as Error).message;
     }

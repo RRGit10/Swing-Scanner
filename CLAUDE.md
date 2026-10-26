@@ -94,6 +94,7 @@ Do NOT substitute generic indicators (RSI, MACD, Bollinger, etc.) or invent stra
   - T1 hit = touch (1-min high ≥ T1 for calls, low ≤ T1 for puts). Invalidation = a close beyond the level on the trading chart. This slightly favors wins, because the method exits at the target.
   - Also record the lowest ask seen in the entry zone after the trigger. Exit quote = the first option snapshot whose quote time is at/after the hit; record bid and ask. Gain/loss % = (exit bid − entry ask) / entry ask, labeled indicative.
   - Missed time (server stopped / Mac slept): on restart, backfill outcomes for open triggered signals from 1-min bars between the last tracked time and now, in time order. If the exit snapshot moment was missed, record the outcome but mark the exit "exit quote missed" and leave gain % empty — never estimate it. Log each backfill in signal_events.
+  - Scheduling: the next scan is planned after each scan (or once the planned time has passed), never on every heartbeat — re-planning each heartbeat pushed the next scan into the future so scheduled scans never ran (fixed after the Oct 26 history gaps).
   - Database: server/data/scanner.db (git-ignored).
 
 ## UI and settings (decided)
