@@ -36,6 +36,19 @@ describe('ScannerDb (in-memory)', () => {
     expect(db.activeSignals().map((r) => r.key)).toEqual([row.key]);
   });
 
+  it('per-pattern summaries filter by type', () => {
+    const db = new ScannerDb(':memory:');
+    const mk = (key: string, type: string, outcome: string) => db.upsertSignal({ ...applyScan(null, snap({ key, type: type as never }), NOW).row, outcome: outcome as never });
+    mk('a', 'bull_flag', 'win');
+    mk('b', 'bull_flag', 'loss');
+    mk('c', 'double_bottom', 'win');
+    expect(db.historyByPattern()).toMatchObject({
+      bull_flag: { pattern: { resolved: 2, wins: 1, hitRate: 0.5 } },
+      double_bottom: { pattern: { resolved: 1, wins: 1, hitRate: 1 } },
+    });
+    expect(Object.keys(db.historyByPattern(99))).toEqual([]);
+  });
+
   it('history summary: pattern hit rate (all triggered, stock outcome) and tradeable hit rate (with a contract)', () => {
     const db = new ScannerDb(':memory:');
     const mk = (key: string, outcome: string, contract: string | null, gainPct: number | null) => {

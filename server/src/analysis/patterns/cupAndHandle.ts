@@ -3,16 +3,20 @@ import { atr } from '../atr.js';
 import { classifyCandle, type CandleSettings } from '../candles.js';
 import { findPivots } from './pivots.js';
 import type { PatternMatch, PatternSettings } from './types.js';
-import { argMaxHigh, argMinLow, hline, point, targetReached, tradingDays, windowStart } from './util.js';
+import { argMaxHigh, argMinLow, flipCandles, hline, point, targetReached, tradingDays, unflipMatch, windowStart } from './util.js';
+
+type CupCore = Omit<PatternMatch, 'type' | 'direction'>;
 
 /**
- * Cup and handle (bullish). Neckline = left-rim high. Right rim within rimTolAtr × ATR of it; cup depth
- * ≥ cupMinDepthAtr × ATR and width ≥ cupMinWidth. Handle low stays above the cup bottom and in the
- * upper part of the cup, handle ≤ handleMaxFraction of the cup width.
- * Trigger = first boom boom after the handle low that closes above the neckline or launches from the
- * handle. Target = neckline (trigger closed below it, or still armed) or neckline + depth (closed above).
+ * Cup and handle shape on (possibly flipped) candles. Neckline = the line through the left-rim and right-rim highs
+ * (rims within rimTolAtr × ATR, so it may tilt). Cup: depth below the neckline ≥ cupMinDepthAtr × ATR, width ≥
+ * cupMinWidth, rounded (average low above the bottom ≤ cupMaxAvgHeight × depth). Handle: candles after the right
+ * rim, low above the cup bottom and in the upper part of the cup, ≤ handleMaxFraction of the cup width.
+ * Trigger = first `isBoom` candle after the handle low that closes above the neckline or launches from the handle
+ * (low inside the handle range, close still at/below the neckline). Target = neckline when the trigger closed
+ * below it (or while armed), neckline + depth when it closed above. Never a target already reached.
  */
-export function detectCupAndHandle(candles: Candle[], s: PatternSettings, cs: CandleSettings): PatternMatch | null {
+function cupCore(candles: Candle[], s: PatternSettings, isBoom: (k: number) => boolean): CupCore | null {
   const ranges = atr(candles, s.atrPeriod);
   const start = windowStart(candles, s.lookback);
   const highs = findPivots(candles, s.pivotN).highs.filter((p) => p.index >= start);
@@ -25,17 +29,22 @@ export function detectCupAndHandle(candles: Candle[], s: PatternSettings, cs: Ca
 
     for (let l = r - 1; l >= 0; l--) {
       const left = highs[l]!;
-      const neckline = left.price;
       const width = right.index - left.index;
       if (width < s.cupMinWidth) continue;
-      if (Math.abs(right.price - neckline) > s.rimTolAtr * range) continue;
+      if (Math.abs(right.price - left.price) > s.rimTolAtr * range) continue;
+      const slope = (right.price - left.price) / width;
+      const neckAt = (k: number) => left.price + slope * (k - left.index);
       const bottomIndex = argMinLow(candles, left.index + 1, right.index - 1);
       const bottom = candles[bottomIndex]!.low;
       // Each rim is the highest high on its side of the cup bottom.
-      if (candles[argMaxHigh(candles, left.index + 1, bottomIndex)]!.high > neckline) continue;
+      if (candles[argMaxHigh(candles, left.index + 1, bottomIndex)]!.high > left.price) continue;
       if (candles[argMaxHigh(candles, bottomIndex, right.index - 1)]!.high > right.price) continue;
-      const depth = neckline - bottom;
+      const depth = neckAt(bottomIndex) - bottom;
       if (depth < s.cupMinDepthAtr * range) continue;
+      // Rounded U, not a V: the cup spends most of its time near the bottom.
+      let heightSum = 0;
+      for (let k = left.index + 1; k < right.index; k++) heightSum += (candles[k]!.low - bottom) / depth;
+      if (heightSum / (width - 1) > s.cupMaxAvgHeight) continue;
 
       const handleFloor = bottom + s.handleMinDepthFraction * depth;
       const maxHandle = Math.floor(width * s.handleMaxFraction);
@@ -49,16 +58,16 @@ export function detectCupAndHandle(candles: Candle[], s: PatternSettings, cs: Ca
           break;
         }
         const c = candles[k]!;
-        if (handleLowIndex >= 0 && classifyCandle(candles, k, cs).names.includes('boom_boom')) {
+        if (handleLowIndex >= 0 && isBoom(k)) {
           const handleLow = candles[handleLowIndex]!.low;
-          const fromHandle = c.close <= neckline && c.low >= handleLow && c.low <= handleHigh;
-          if (c.close > neckline || fromHandle) {
+          const fromHandle = c.close <= neckAt(k) && c.low >= handleLow && c.low <= handleHigh;
+          if (c.close > neckAt(k) || fromHandle) {
             triggerIndex = k;
             break;
           }
         }
         // A non-trigger candle closing above the neckline is a missed breakout; one in the lower cup kills it.
-        if (c.close > neckline || c.low <= handleFloor) {
+        if (c.close > neckAt(k) || c.low <= handleFloor) {
           valid = false;
           break;
         }
@@ -69,23 +78,25 @@ export function detectCupAndHandle(candles: Candle[], s: PatternSettings, cs: Ca
       if (tradingDays(candles, left.index, handleLowIndex) > s.maxSpanDays) continue;
       if (triggerIndex != null && triggerIndex < candles.length - s.recentTriggerBars) continue;
 
-      const breakout = triggerIndex != null && candles[triggerIndex]!.close > neckline;
-      const target = breakout ? neckline + depth : neckline;
+      const at = triggerIndex ?? last;
+      const breakout = triggerIndex != null && candles[triggerIndex]!.close > neckAt(triggerIndex);
+      const target = breakout ? neckAt(at) + depth : neckAt(at);
       if (targetReached(candles, triggerIndex ?? handleLowIndex + 1, target, 'bullish')) continue;
       const handleLow = candles[handleLowIndex]!.low;
 
       return {
-        type: 'cup_and_handle',
-        direction: 'bullish',
         state: triggerIndex == null ? 'armed' : 'triggered',
         points: [
-          point(candles, 'left_rim', left.index, neckline),
+          point(candles, 'left_rim', left.index, left.price),
           point(candles, 'cup_bottom', bottomIndex, bottom),
           point(candles, 'right_rim', right.index, right.price),
           point(candles, 'handle_low', handleLowIndex, handleLow),
         ],
-        lines: [hline(candles, 'neckline', left.index, neckline), hline(candles, 'target', right.index, target)],
-        triggerLevel: neckline,
+        lines: [
+          { label: 'neckline', from: { time: left.time, price: left.price }, to: { time: candles[last]!.time, price: neckAt(last) } },
+          hline(candles, 'target', right.index, target),
+        ],
+        triggerLevel: neckAt(at),
         triggerIndex,
         triggerTime: triggerIndex == null ? null : candles[triggerIndex]!.time,
         target,
@@ -96,4 +107,24 @@ export function detectCupAndHandle(candles: Candle[], s: PatternSettings, cs: Ca
     }
   }
   return null;
+}
+
+/** Cup and handle (bullish): the trigger is a boom boom candle. */
+export function detectCupAndHandle(candles: Candle[], s: PatternSettings, cs: CandleSettings): PatternMatch | null {
+  const m = cupCore(candles, s, (k) => classifyCandle(candles, k, cs).names.includes('boom_boom'));
+  return m ? { ...m, type: 'cup_and_handle', direction: 'bullish' } : null;
+}
+
+/**
+ * Inverted cup and handle (bearish; not from the class method): the exact mirror — a rounded dome on a neckline
+ * through its two base lows, a handle drifting up or sideways in the lower part of the dome, and a RED boom boom
+ * (judged on the real candles) after the handle high that closes below the neckline or launches from the handle
+ * (high inside the handle range, close still at/above the neckline). Target = neckline if the trigger closed
+ * above it, neckline − dome height if it closed below.
+ */
+export function detectInvertedCupAndHandle(candles: Candle[], s: PatternSettings, cs: CandleSettings): PatternMatch | null {
+  const m = cupCore(flipCandles(candles), s, (k) => classifyCandle(candles, k, cs).names.includes('red_boom_boom'));
+  return m
+    ? unflipMatch({ ...m, type: 'cup_and_handle', direction: 'bullish' }, 'inverted_cup_and_handle', 'bearish', { cup_bottom: 'dome_top', handle_low: 'handle_high' })
+    : null;
 }

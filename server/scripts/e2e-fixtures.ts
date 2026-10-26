@@ -7,6 +7,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as fx from '../src/analysis/__fixtures__/patterns.js';
+import * as dg from '../src/analysis/__fixtures__/diagrams.js';
 import { classifyLastThree, DEFAULT_CANDLE_SETTINGS } from '../src/analysis/candles.js';
 import { emaSet } from '../src/analysis/ema.js';
 import { detectPatterns } from '../src/analysis/patterns/index.js';
@@ -19,6 +20,10 @@ const CASES: [ticker: string, type: PatternType, candles: Candle[]][] = [
   ['DTOP', 'double_top', fx.doubleTopArmed],
   ['CUPH', 'cup_and_handle', fx.cupHandleFromHandle],
   ['IHS', 'inverse_head_and_shoulders', fx.ihsTriggered],
+  // not from the class method
+  ['DBOT', 'double_bottom', dg.diagramDoubleBottom],
+  ['ICUP', 'inverted_cup_and_handle', dg.diagramInvertedCupAndHandle],
+  ['HSTOP', 'head_and_shoulders', dg.diagramHeadShoulders],
 ];
 
 const tickers = [];
@@ -44,6 +49,11 @@ for (const [ticker, type, candles] of CASES) {
     patterns: [{ key, type: m.type, direction: m.direction, status: 'WATCH', points: m.points, lines: m.lines }],
   };
 }
+
+// A ticker with no pattern: candles and EMAs only.
+const quiet = fx.candlesOf(fx.ZIGZAG);
+tickers.push({ ticker: 'NONE', price: quiet.at(-1)!.close, delayedPrice: quiet.at(-1)!.close, emaTable: [], contracts: [], bestStatus: null, patterns: [] });
+charts.NONE = { ticker: 'NONE', timeframe: '15m', candles: quiet, ema: emaSet(quiet), patterns: [] };
 
 const out = fileURLToPath(new URL('../../client/e2e/fixtures/patterns.json', import.meta.url));
 mkdirSync(fileURLToPath(new URL('.', 'file://' + out)), { recursive: true });

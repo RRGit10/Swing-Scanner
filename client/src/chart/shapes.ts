@@ -145,59 +145,74 @@ export function buildPatternDrawing({ candles, points, pattern }: ShapeInput): P
       }
       return done(shapes, tags, parts);
     }
-    case 'double_top': {
-      const p1 = at('peak_1');
-      const dip = at('dip');
-      const p2 = at('peak_2');
-      if (!p1 || !dip || !p2) return null;
-      // Outer legs make it read as an "M": the rise into peak 1 and the drop after peak 2.
-      const half = dip.index - p1.index;
-      const lowest = (from: number, to: number): PricePt | null => {
+    case 'double_top':
+    case 'double_bottom': {
+      // Double top: "M" (rise into top 1 → dip → top 2 → drop). Double bottom mirrors it as a "W".
+      const top = pattern.type === 'double_top';
+      const [l1, l2, l3, t1, t2] = top ? ['peak_1', 'dip', 'peak_2', 'Top 1', 'Top 2'] : ['bottom_1', 'peak', 'bottom_2', 'Bottom 1', 'Bottom 2'];
+      const p1 = at(l1);
+      const mid = at(l2);
+      const p2 = at(l3);
+      if (!p1 || !mid || !p2) return null;
+      const half = mid.index - p1.index;
+      const extreme = (from: number, to: number): PricePt | null => {
         let best: PricePt | null = null;
-        for (let i = Math.max(0, from); i <= Math.min(last, to); i++) if (!best || candles[i]!.low < best.price) best = { index: i, price: candles[i]!.low };
+        for (let i = Math.max(0, from); i <= Math.min(last, to); i++) {
+          const price = top ? candles[i]!.low : candles[i]!.high;
+          if (!best || (top ? price < best.price : price > best.price)) best = { index: i, price };
+        }
         return best;
       };
-      const lead = lowest(p1.index - half, p1.index - 1);
-      const tail = trig != null ? { index: trig, price: candles[trig]!.close } : lowest(p2.index + 1, p2.index + half);
-      const m = [...(lead ? [lead] : []), p1, dip, p2, ...(tail ? [tail] : [])];
+      const lead = extreme(p1.index - half, p1.index - 1);
+      const tail = trig != null ? { index: trig, price: candles[trig]!.close } : extreme(p2.index + 1, p2.index + half);
+      const line = [...(lead ? [lead] : []), p1, mid, p2, ...(tail ? [tail] : [])];
+      const prefer = top ? ('above' as const) : ('below' as const);
       return done(
-        [{ kind: 'polyline', width: 2.5, points: m }, neckline({ index: p1.index, price: dip.price }, { index: end, price: dip.price })],
-        [tag('Top 1', p1, 'above'), tag('Top 2', p2, 'above')],
-        ['M line', 'neckline'],
+        [{ kind: 'polyline', width: 2.5, points: line }, neckline({ index: p1.index, price: mid.price }, { index: end, price: mid.price })],
+        [tag(t1, p1, prefer), tag(t2, p2, prefer)],
+        [top ? 'M line' : 'W line', 'neckline'],
       );
     }
-    case 'inverse_head_and_shoulders': {
+    case 'inverse_head_and_shoulders':
+    case 'head_and_shoulders': {
+      const inverse = pattern.type === 'inverse_head_and_shoulders';
       const ls = at('left_shoulder');
       const head = at('head');
       const rs = at('right_shoulder');
-      const k1 = at('peak_1');
-      const k2 = at('peak_2');
+      const k1 = at(inverse ? 'peak_1' : 'dip_1');
+      const k2 = at(inverse ? 'peak_2' : 'dip_2');
       if (!ls || !head || !rs || !k1 || !k2) return null;
       const slope = (k2.price - k1.price) / (k2.index - k1.index);
+      const prefer = inverse ? ('below' as const) : ('above' as const);
       return done(
         [{ kind: 'polyline', width: 2.5, points: [ls, k1, head, k2, rs] }, neckline(k1, { index: end, price: k1.price + slope * (end - k1.index) })],
-        [tag('LS', ls, 'below'), tag('Head', head, 'below'), tag('RS', rs, 'below')],
+        [tag('LS', ls, prefer), tag('Head', head, prefer), tag('RS', rs, prefer)],
         ['shoulders and head', 'neckline'],
       );
     }
-    case 'cup_and_handle': {
+    case 'cup_and_handle':
+    case 'inverted_cup_and_handle': {
+      const cup = pattern.type === 'cup_and_handle';
       const left = at('left_rim');
-      const bottom = at('cup_bottom');
+      const turn = at(cup ? 'cup_bottom' : 'dome_top');
       const right = at('right_rim');
-      if (!left || !bottom || !right) return null;
-      const shapes: Shape[] = [{ kind: 'curve', from: left, via: bottom, to: right }];
-      const parts = ['cup curve'];
-      const tags = [tag('Cup', bottom, 'below')];
+      if (!left || !turn || !right) return null;
+      const shapes: Shape[] = [{ kind: 'curve', from: left, via: turn, to: right }];
+      const parts = [cup ? 'cup curve' : 'dome curve'];
+      const tags = [tag(cup ? 'Cup' : 'Dome', turn, cup ? 'below' : 'above')];
       const hFrom = right.index + 1;
       const hTo = trig != null ? trig - 1 : last;
       if (hTo >= hFrom) {
         const handle = candles.slice(hFrom, hTo + 1);
         const top = Math.max(...handle.map((c) => c.high));
-        shapes.push({ kind: 'box', from: hFrom, to: hTo, top, bottom: Math.min(...handle.map((c) => c.low)) });
+        const bottom = Math.min(...handle.map((c) => c.low));
+        shapes.push({ kind: 'box', from: hFrom, to: hTo, top, bottom });
         parts.push('handle box');
-        tags.push(tag('Handle', { index: Math.floor((hFrom + hTo) / 2), price: top }, 'above'));
+        tags.push(tag('Handle', { index: Math.floor((hFrom + hTo) / 2), price: cup ? top : bottom }, cup ? 'above' : 'below'));
       }
-      shapes.push(neckline(left, { index: end, price: left.price }));
+      // The neckline runs through both rims (it may tilt) and on to the trigger / last candle.
+      const slope = (right.price - left.price) / (right.index - left.index);
+      shapes.push(neckline(left, { index: end, price: left.price + slope * (end - left.index) }));
       parts.push('neckline');
       return done(shapes, tags, parts);
     }

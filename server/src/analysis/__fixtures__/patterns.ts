@@ -52,8 +52,8 @@ export const bullFlagTriggered = candlesOf(ZIGZAG, POLE, pathBars([[0, 108], [4,
 export const bullFlagArmed = candlesOf(ZIGZAG, POLE, pathBars([[0, 108], [4, 106]]).slice(1));
 /** Pullback to 103.25 retraces ~59% of the 8.5 pole. */
 export const bullFlagTooDeep = candlesOf(ZIGZAG, POLE, pathBars([[0, 108], [4, 103.5]]).slice(1), [[103.5, 108.8, 103.4, 108.6]]);
-/** 10 flag candles before the breakout (> 8). */
-export const bullFlagTooLong = candlesOf(ZIGZAG, POLE, pathBars([[0, 108], [10, 106]]).slice(1), [[106, 108.8, 105.9, 108.6]]);
+/** 19 flag candles before the breakout: more than 2× the pole (9 candles from its low), under the 20 cap. */
+export const bullFlagTooLong = candlesOf(ZIGZAG, POLE, pathBars([[0, 108], [19, 106]]).slice(1), [[106, 108.8, 105.9, 108.6]]);
 /** Pole rises only 2.0 (about 2 ATR). */
 export const bullFlagSmallPole = candlesOf(
   ZIGZAG,
@@ -62,19 +62,21 @@ export const bullFlagSmallPole = candlesOf(
   [[101, 102.3, 100.9, 102.2]],
 );
 
-// ---------- cup & handle: left rim bar 10 (neckline 100.25), bottom bar 20 (94.75), right rim bar 30, handle 31–34
-const CUP: [number, number][] = [[0, 95], [10, 100], [20, 95], [30, 100], [34, 98]];
+// ---------- cup & handle: left rim bar 10 (neckline 100.25), rounded bottom bar 20 (94.75), right rim bar 30, handle 31–34
+/** A rounded U between the rims (the cup rule rejects straight V's). */
+const U = (rim: number, rightRim = rim): [number, number][] => [[10, rim], [13, 96.6], [16, 95.4], [20, 95], [24, 95.4], [27, 96.6], [30, rightRim]];
+const CUP: [number, number][] = [[0, 95], ...U(100), [34, 98]];
 export const cupHandleArmed = candlesOf(pathBars(CUP));
 /** Boom boom launching from the handle, closing 99.2 (below the neckline). */
 export const cupHandleFromHandle = candlesOf(pathBars(CUP), [[98.0, 99.22, 97.98, 99.2]]);
 /** Boom boom closing 100.6, above the neckline. */
 export const cupHandleBreakout = candlesOf(pathBars(CUP), [[98.0, 100.62, 97.98, 100.6]]);
 /** Handle falls to 95.75, below the cup midpoint (97.5). */
-export const cupHandleDeepHandle = candlesOf(pathBars([[0, 95], [10, 100], [20, 95], [30, 100], [34, 96]]), [[96.0, 97.22, 95.98, 97.2]]);
-/** Right rim only 98.25 (2 below the neckline). */
-export const cupHandleLowRightRim = candlesOf(pathBars([[0, 95], [10, 100], [20, 95], [30, 98], [33, 97.85]]), [[97.85, 99.07, 97.83, 99.05]]);
-/** Rims only 9 candles apart (handle and boom boom otherwise valid). */
-export const cupHandleNarrow = candlesOf(pathBars([[0, 95], [10, 100], [14, 96], [19, 100], [21, 99]]), [[99.0, 100.22, 98.98, 100.2]]);
+export const cupHandleDeepHandle = candlesOf(pathBars([[0, 95], ...U(100), [34, 96]]), [[96.0, 97.22, 95.98, 97.2]]);
+/** Right rim only 98.25 (2 below the neckline, > 1.5 × ATR). */
+export const cupHandleLowRightRim = candlesOf(pathBars([[0, 95], ...U(100, 98), [33, 97.85]]), [[97.85, 99.07, 97.83, 99.05]]);
+/** Rims only 9 candles apart (rounded, handle and boom boom otherwise valid). */
+export const cupHandleNarrow = candlesOf(pathBars([[0, 95], [10, 100], [12, 96.3], [14, 95.8], [16, 96.3], [19, 100], [21, 99]]), [[99.0, 100.22, 98.98, 100.2]]);
 
 // ---------- inverse H&S: LS bar 10, P1 bar 16 (108.25), head bar 26, P2 bar 32 (107.75), RS bar 38
 const RS_BOUNCE: Bar[] = [

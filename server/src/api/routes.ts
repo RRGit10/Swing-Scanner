@@ -8,6 +8,7 @@ import { DEFAULT_APP_SETTINGS } from '../scanner/settings.js';
 import { validateSettings } from '../settings/validate.js';
 import type { ScannerDb } from '../storage/db.js';
 import type { LogoImage } from '../logos/cache.js';
+import { NOT_CLASS_METHOD } from '../analysis/patterns/types.js';
 
 export interface StatusPayload {
   market: 'open' | 'closed';
@@ -118,6 +119,8 @@ export function createApp(deps: AppDeps): express.Express {
       currentVersion: current,
       versions: deps.db.settingsVersions().map(({ version, savedAt, changes, note }) => ({ version, savedAt, changes, note })),
       summary: { current: deps.db.historySummary(current), allTime: deps.db.historySummary() },
+      byPattern: { current: deps.db.historyByPattern(current), allTime: deps.db.historyByPattern() },
+      notClassMethod: NOT_CLASS_METHOD,
       signals,
     });
   });

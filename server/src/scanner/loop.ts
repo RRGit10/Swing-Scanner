@@ -87,7 +87,8 @@ export class ScannerLoop {
       const { version, settings } = this.deps.settings();
       const today = etClock(started).date;
       const sessionDate = lastSessionDate(this.calendar, started) ?? today;
-      const ctx = { today, sessionDate, calendar: this.calendar, settings };
+      const frozenT1 = new Map(this.deps.db.activeSignals().flatMap((r) => (r.frozenT1 != null ? [[r.key, r.frozenT1] as const] : [])));
+      const ctx = { today, sessionDate, calendar: this.calendar, settings, frozenT1 };
       const entries: TickerEntry[] = [];
       for (const symbol of settings.watchlist) entries.push(await scanTicker(this.deps.scan, symbol, ctx));
 

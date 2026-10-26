@@ -131,13 +131,14 @@ test('history: both hit rates, versions, and the log or an empty state', async (
   await expect(page.getByRole('heading', { name: 'Pattern hit rate' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Tradeable hit rate' })).toBeVisible();
   await expect(page.getByText(/Settings versions \(\d+\)/)).toBeVisible();
-  const rows = page.locator('tbody tr');
+  const rows = page.getByRole('table', { name: 'Signal log' }).locator('tbody tr');
   if ((await rows.count()) === 0) {
     await expect(page.getByText(/No signals logged yet|No signals match/)).toBeVisible();
   } else {
-    await expect(page.getByRole('columnheader', { name: 'Gain (indicative)' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Gain (indicative)', exact: true })).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Hit rate by pattern' })).toBeVisible();
     await rows.first().click();
-    await expect(page.locator('tbody ol li').first()).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Signal log' }).locator('tbody ol li').first()).toBeVisible();
   }
   await page.getByRole('button', { name: 'All time' }).click();
   await shot(page, 'history-all-time', info.project.name);
@@ -174,23 +175,59 @@ const EXPECTED: Record<string, RegExp> = {
   DTOP: /^Double top drawn: M line, neckline\. Tags: Top 1, Top 2\./,
   CUPH: /^Cup and handle drawn: cup curve, handle box, neckline\. Tags: Cup, Handle\./,
   IHS: /^Inverse head and shoulders drawn: shoulders and head, neckline\. Tags: LS, Head, RS\./,
+  DBOT: /^Double bottom drawn: W line, neckline\. Tags: Bottom 1, Bottom 2\./,
+  ICUP: /^Inverted cup and handle drawn: dome curve, handle box, neckline\. Tags: Dome, Handle\./,
+  HSTOP: /^Head and shoulders drawn: shoulders and head, neckline\. Tags: LS, Head, RS\./,
 };
+const NOT_CLASS = new Set(['DBOT', 'ICUP', 'HSTOP']);
+
+async function routeFixtures(page: Page, tickers: unknown[] = fixtures.tickers) {
+  await page.route('**/api/signals', (r) => r.fulfill({ json: { scannedAt: 1792762200, finishedAt: 1792762204, market: 'closed', sessionDate: '2026-10-23', errors: [], tickers } }));
+  await page.route('**/api/chart/**', (r) => {
+    const t = new URL(r.request().url()).pathname.split('/').pop()!;
+    const chart = (fixtures.charts as Record<string, unknown>)[t];
+    return chart && r.request().url().includes('tf=15m') ? r.fulfill({ json: chart }) : r.fulfill({ status: 404, json: { error: 'no chart' } });
+  });
+}
 
 test.describe('pattern shapes (fixtures)', () => {
-  for (const { ticker } of fixtures.tickers) {
+  for (const { ticker } of fixtures.tickers.filter((t) => t.patterns.length)) {
     test(`${ticker}: shape drawn, no point labels, no console errors`, async ({ page }, info) => {
-      await page.route('**/api/signals', (r) => r.fulfill({ json: { scannedAt: 1792762200, finishedAt: 1792762204, market: 'closed', sessionDate: '2026-10-23', errors: [], tickers: fixtures.tickers } }));
-      await page.route('**/api/chart/**', (r) => {
-        const t = new URL(r.request().url()).pathname.split('/').pop()!;
-        const chart = (fixtures.charts as Record<string, unknown>)[t];
-        return chart && r.request().url().includes('tf=15m') ? r.fulfill({ json: chart }) : r.fulfill({ status: 404, json: { error: 'no chart' } });
-      });
+      await routeFixtures(page);
       const errors = await open(page, `/#/t/${ticker}`);
       const chart = page.getByTestId('price-chart');
       await expect(chart.locator('canvas').first()).toBeVisible();
       await expect(page.getByTestId('pattern-drawing')).toHaveText(EXPECTED[ticker]!);
+      if (NOT_CLASS.has(ticker)) await expect(page.getByText('Not from the class method').first()).toBeVisible();
+      else await expect(page.getByText('Not from the class method')).toHaveCount(0);
       await chart.screenshot({ path: `e2e/screenshots/${info.project.name}/shape-${ticker}.png` });
       expect(errors).toEqual([]);
     });
   }
+});
+
+test.describe('display rule: patterns are drawn only when detected', () => {
+  test('a ticker with no pattern shows candles and EMAs only: no shapes, no tags, not listed with a setup', async ({ page }) => {
+    await routeFixtures(page);
+    await open(page, '/#/');
+    await expect(page.locator('section[aria-labelledby="t-NONE"]')).toHaveCount(0);
+    await expect(page.getByText(/No setup right now: .*NONE/)).toBeVisible();
+    await open(page, '/#/t/NONE');
+    await expect(page.getByTestId('price-chart').locator('canvas').first()).toBeVisible();
+    await expect(page.getByTestId('pattern-drawing')).toHaveText('');
+  });
+
+  test('a pattern that is gone from the latest scan is no longer listed or drawn', async ({ page }) => {
+    const withoutCup = fixtures.tickers.map((t) => (t.ticker === 'CUPH' ? { ...t, patterns: [], bestStatus: null } : t));
+    await routeFixtures(page);
+    await open(page, '/#/t/CUPH');
+    await expect(page.getByTestId('pattern-drawing')).toHaveText(/^Cup and handle drawn/);
+    await page.unroute('**/api/signals');
+    await routeFixtures(page, withoutCup);
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('pattern-drawing')).toHaveText('');
+    await open(page, '/#/');
+    await expect(page.locator('section[aria-labelledby="t-CUPH"]')).toHaveCount(0);
+  });
 });

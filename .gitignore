@@ -9,3 +9,4 @@ client/e2e/.tmp/
 client/e2e/screenshots/
 client/test-results/
 client/playwright-report/
+server/src/analysis/__fixtures__/diagrams/

@@ -3,7 +3,7 @@ import { atr } from '../atr.js';
 import { classifyCandle, type CandleSettings } from '../candles.js';
 import { findPivots } from './pivots.js';
 import type { PatternMatch, PatternSettings } from './types.js';
-import { argMaxHigh, argMinLow, hline, point, targetReached, tradingDays, windowStart } from './util.js';
+import { argMaxHigh, argMinLow, flipCandles, hline, point, targetReached, tradingDays, unflipMatch, windowStart } from './util.js';
 
 /**
  * Inverse head and shoulders (bullish): three consecutive swing lows, the middle one lowest, shoulders
@@ -12,11 +12,26 @@ import { argMaxHigh, argMinLow, hline, point, targetReached, tradingDays, window
  * that closes above the right-shoulder low and below the neckline. Target = top of the pattern = the
  * higher of the two peaks.
  */
-export function detectInverseHeadShoulders(
-  candles: Candle[],
-  s: PatternSettings,
-  cs: CandleSettings,
-): PatternMatch | null {
+export function detectInverseHeadShoulders(candles: Candle[], s: PatternSettings, cs: CandleSettings): PatternMatch | null {
+  const m = ihsCore(candles, s, (k) => classifyCandle(candles, k, cs).bias === 'bullish');
+  return m ? { ...m, type: 'inverse_head_and_shoulders', direction: 'bullish' } : null;
+}
+
+/**
+ * Head and shoulders top (bearish; not from the class method): the mirror — three consecutive swing highs, the
+ * middle one highest, shoulders within shoulderTolAtr × ATR, head ≥ headMinAtr × ATR above the higher shoulder,
+ * neckline through the two dips. Trigger = first BEARISH-labeled candle (judged on the real candles) after the
+ * right shoulder that closes below the right-shoulder high and above the neckline. Target = the lower of the two
+ * dips. Invalid on a close above the right-shoulder high.
+ */
+export function detectHeadAndShoulders(candles: Candle[], s: PatternSettings, cs: CandleSettings): PatternMatch | null {
+  const m = ihsCore(flipCandles(candles), s, (k) => classifyCandle(candles, k, cs).bias === 'bearish');
+  return m
+    ? unflipMatch({ ...m, type: 'inverse_head_and_shoulders', direction: 'bullish' }, 'head_and_shoulders', 'bearish', { peak_1: 'dip_1', peak_2: 'dip_2' })
+    : null;
+}
+
+function ihsCore(candles: Candle[], s: PatternSettings, isTrigger: (k: number) => boolean): Omit<PatternMatch, 'type' | 'direction'> | null {
   const ranges = atr(candles, s.atrPeriod);
   const start = windowStart(candles, s.lookback);
   const lows = findPivots(candles, s.pivotN).lows.filter((p) => p.index >= start);
@@ -48,7 +63,7 @@ export function detectInverseHeadShoulders(
         valid = false; // broke the right shoulder, or ran above the neckline without an entry
         break;
       }
-      if (classifyCandle(candles, k, cs).bias === 'bullish') {
+      if (isTrigger(k)) {
         triggerIndex = k;
         break;
       }
@@ -58,8 +73,6 @@ export function detectInverseHeadShoulders(
     if (targetReached(candles, rs.index + 1, target, 'bullish')) continue;
 
     return {
-      type: 'inverse_head_and_shoulders',
-      direction: 'bullish',
       state: triggerIndex == null ? 'armed' : 'triggered',
       points: [
         point(candles, 'left_shoulder', ls.index, ls.price),

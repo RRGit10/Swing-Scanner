@@ -255,9 +255,17 @@ export class ScannerDb {
     }));
   }
 
-  /** All-time summary, or only signals first seen under `version`. */
-  historySummary(version?: number): HistorySummary {
-    const scope = version == null ? '' : `settings_version = ${Math.floor(version)}`;
+  /** Summary per pattern type that has signals (all time, or only signals first seen under `version`). */
+  historyByPattern(version?: number): Record<string, HistorySummary> {
+    const scope = version == null ? '' : `WHERE settings_version = ${Math.floor(version)}`;
+    const types = (this.db.prepare(`SELECT DISTINCT type FROM signals ${scope} ORDER BY type`).all() as { type: string }[]).map((r) => r.type);
+    return Object.fromEntries(types.map((t) => [t, this.historySummary(version, t)]));
+  }
+
+  /** All-time summary, or only signals first seen under `version`; optionally one pattern type. */
+  historySummary(version?: number, type?: string): HistorySummary {
+    const typeScope = type == null ? '' : `type = '${type.replace(/[^a-z_]/g, '')}'`;
+    const scope = [version == null ? '' : `settings_version = ${Math.floor(version)}`, typeScope].filter(Boolean).join(' AND ');
     const where = (...conds: string[]) => {
       const all = [scope, ...conds].filter(Boolean);
       return all.length ? `WHERE ${all.join(' AND ')}` : '';

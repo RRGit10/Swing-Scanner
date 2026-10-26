@@ -1,6 +1,18 @@
 import type { Direction } from '../types.js';
 
-export type PatternType = 'cup_and_handle' | 'inverse_head_and_shoulders' | 'bull_flag' | 'bear_flag' | 'double_top';
+export type PatternType =
+  | 'cup_and_handle'
+  | 'inverse_head_and_shoulders'
+  | 'bull_flag'
+  | 'bear_flag'
+  | 'double_top'
+  // not from the class method (mirrors added on request)
+  | 'double_bottom'
+  | 'inverted_cup_and_handle'
+  | 'head_and_shoulders';
+
+/** Patterns that are not part of Chris Sain's class method; labeled as such in the UI. */
+export const NOT_CLASS_METHOD: readonly PatternType[] = ['double_bottom', 'inverted_cup_and_handle', 'head_and_shoulders'];
 
 export interface PricePoint {
   time: number;
@@ -59,7 +71,14 @@ export interface PatternSettings {
   poleMinAtr: number;
   poleMaxBars: number;
   flagMinBars: number;
+  /** absolute cap on flag candles */
   flagMaxBars: number;
+  /** flag may have at most this × the pole's candle count */
+  flagPoleMultiple: number;
+  /** flag channel slope (per candle, in ATR) must be ≤ this against the pole: down/flat for a bull flag */
+  flagMaxSlopeAtr: number;
+  /** flag channel height ≤ this × pole height (parallel and tight) */
+  flagMaxHeightFraction: number;
   flagMaxRetrace: number;
   // cup & handle
   cupMinDepthAtr: number;
@@ -68,6 +87,8 @@ export interface PatternSettings {
   handleMaxFraction: number;
   /** handle low must stay above bottom + this × cup depth (0.5 = upper half) */
   handleMinDepthFraction: number;
+  /** rounded U, not a V: the cup candles' average low above the bottom ≤ this × depth */
+  cupMaxAvgHeight: number;
   // inverse head & shoulders
   shoulderTolAtr: number;
   headMinAtr: number;
@@ -84,13 +105,17 @@ export const DEFAULT_PATTERN_SETTINGS: PatternSettings = {
   poleMinAtr: 3,
   poleMaxBars: 10,
   flagMinBars: 2,
-  flagMaxBars: 8,
+  flagMaxBars: 20,
+  flagPoleMultiple: 2,
+  flagMaxSlopeAtr: 0.1,
+  flagMaxHeightFraction: 0.4,
   flagMaxRetrace: 0.5,
   cupMinDepthAtr: 2,
-  rimTolAtr: 0.5,
+  rimTolAtr: 1.5,
   cupMinWidth: 10,
   handleMaxFraction: 1 / 3,
   handleMinDepthFraction: 0.5,
+  cupMaxAvgHeight: 0.32,
   shoulderTolAtr: 1,
   headMinAtr: 0.5,
 };

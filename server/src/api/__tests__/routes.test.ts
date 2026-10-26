@@ -67,6 +67,8 @@ describe('API', () => {
     expect(body.summary.allTime).toMatchObject({ total: 1, triggered: 0 });
     expect(body.summary.current).toMatchObject({ total: 1 });
     expect(body.versions.map((v: { version: number }) => v.version)).toEqual([1]);
+    expect(body.byPattern.allTime.double_top.pattern).toMatchObject({ resolved: 0 });
+    expect(body.notClassMethod).toEqual(['double_bottom', 'inverted_cup_and_handle', 'head_and_shoulders']);
     expect(body.signals[0]).toMatchObject({ key: 'k', outcome: 'open' });
     expect(body.signals[0].events.map((e: { kind: string }) => e.kind)).toEqual(['first_seen']);
   });

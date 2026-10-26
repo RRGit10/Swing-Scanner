@@ -59,6 +59,20 @@ describe('scanTicker (fake providers, bull flag fixture)', () => {
     expect(entry.patterns.find((p) => p.type === 'bull_flag')!.status).toBe('AT ENTRY');
   });
 
+  it('a triggered pattern disappears once its T1 (frozen at the trigger) has been touched', async () => {
+    const call = opt({ type: 'call', strike: 105, ask: 3, delta: 0.6, gamma: 0.05, theta: -0.05 });
+    const touched = [...bullFlagTriggered, { ...bullFlagTriggered.at(-1)!, time: bullFlagTriggered.at(-1)!.time + 900, open: 108.6, high: 109.6, low: 108.4, close: 109.3 }];
+    const d = deps([call]);
+    d.candles = new CandleCache(new FixtureCandles(touched));
+    const key = `SPY|bull_flag|bullish|${bullFlagTriggered[16]!.time}`;
+    const keep = await scanTicker(d, 'SPY', { ...ctx, frozenT1: new Map([[key, 110]]) });
+    expect(keep.patterns.map((p) => p.type)).toContain('bull_flag');
+    const d2 = deps([call]);
+    d2.candles = new CandleCache(new FixtureCandles(touched));
+    const gone = await scanTicker(d2, 'SPY', { ...ctx, frozenT1: new Map([[key, 109.5]]) });
+    expect(gone.patterns.map((p) => p.type)).not.toContain('bull_flag');
+  });
+
   it('reports a provider error on the ticker instead of throwing', async () => {
     const d = deps([]);
     d.quotes = { getQuote: async () => Promise.reject(new Error('Finnhub 429 on /api/v1/quote')) };

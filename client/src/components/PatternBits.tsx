@@ -1,6 +1,7 @@
 import type { ContractPick, IntradayTf, PatternEntry, TickerEntry } from '../api/types';
 import { contractName, etDateTime, money, patternLabel, shortDate, signedPct } from '../lib/format';
 import { summarizeSkipped } from '../lib/skipped';
+import { isClassMethod } from '../lib/patterns';
 import { Badge } from './Marks';
 
 export const tfList = (p: PatternEntry) => {
@@ -15,10 +16,15 @@ export function triggerText(p: PatternEntry): string {
   return `Armed: waiting for a close ${p.direction === 'bullish' ? 'above' : 'below'} ${money(p.triggerLevel)}`;
 }
 
-/** Lower quality, 55 EMA reversal, daily EMA in path. */
+/** Not from the class method, lower quality, 55 EMA reversal, daily EMA in path. */
 export function PatternBadges({ p, tf = p.tradingTimeframe }: { p: PatternEntry; tf?: IntradayTf }) {
   return (
     <>
+      {!isClassMethod(p.type) && (
+        <Badge tone="warn" title="Added as a mirror of a class pattern; not part of the class method">
+          Not from the class method
+        </Badge>
+      )}
       {p.lowerQuality && (
         <Badge tone="muted" title="The trigger candle closed outside 9:30–11:30 and 3:00–4:00 ET">
           Lower quality

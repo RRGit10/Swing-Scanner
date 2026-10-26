@@ -133,6 +133,64 @@ describe('buildPatternDrawing', () => {
     expect(d.tags.map((t) => t.text)).toEqual(['Cup', 'Handle']);
   });
 
+  it('cup: the neckline tilts through both rims and extends to the last candle', () => {
+    const candles = Array.from({ length: 36 }, (_, i) => bar(i, 98, 99.5));
+    const d = buildPatternDrawing({
+      candles,
+      points: [pt('left_rim', 10, 101.25), pt('cup_bottom', 22, 95.35), pt('right_rim', 34, 100.25), pt('handle_low', 35, 98)],
+      pattern: pattern({ type: 'cup_and_handle', direction: 'bullish', triggerLevel: 100 }),
+    })!;
+    const neck = d.shapes.find((s) => s.kind === 'polyline' && s.label === 'neckline') as Extract<Shape, { kind: 'polyline' }>;
+    expect(neck.points[0]).toEqual({ index: 10, price: 101.25 });
+    expect(neck.points[1]!.index).toBe(35);
+    expect(neck.points[1]!.price).toBeCloseTo(101.25 - (1 / 24) * 25, 9);
+  });
+
+  it('double bottom (not class method): "W" = drop into bottom 1 → peak → bottom 2 → rise; neckline at the peak', () => {
+    const candles = Array.from({ length: 30 }, (_, i) => bar(i, 99, 101));
+    candles[1] = bar(1, 101, 103);
+    candles[24] = bar(24, 95, 97, 96.5);
+    const d = buildPatternDrawing({
+      candles,
+      points: [pt('bottom_1', 5, 90), pt('peak', 12, 96), pt('bottom_2', 20, 89.8)],
+      pattern: pattern({ type: 'double_bottom', direction: 'bullish', state: 'triggered', triggerTime: T0 + 24 * 900 + 900, triggerLevel: 96 }),
+    })!;
+    expect(d.shapes).toEqual([
+      { kind: 'polyline', width: 2.5, points: [{ index: 1, price: 103 }, { index: 5, price: 90 }, { index: 12, price: 96 }, { index: 20, price: 89.8 }, { index: 24, price: 96.5 }] },
+      { kind: 'polyline', width: 1.5, dash: true, label: 'neckline', points: [{ index: 5, price: 96 }, { index: 24, price: 96 }] },
+    ]);
+    expect(d.tags.map((t) => [t.text, t.prefer])).toEqual([['Bottom 1', 'below'], ['Bottom 2', 'below']]);
+    expect(d.summary).toBe('Double bottom drawn: W line, neckline. Tags: Bottom 1, Bottom 2.');
+  });
+
+  it('head and shoulders (not class method): line LS → dip → head → dip → RS, neckline through the dips, tags above', () => {
+    const candles = Array.from({ length: 45 }, (_, i) => bar(i, 99, 101));
+    const d = buildPatternDrawing({
+      candles,
+      points: [pt('left_shoulder', 14, 105.45), pt('dip_1', 20, 101.75), pt('head', 27, 108.45), pt('dip_2', 33, 101.85), pt('right_shoulder', 38, 105.55)],
+      pattern: pattern({ type: 'head_and_shoulders', direction: 'bearish', triggerLevel: 105.55 }),
+    })!;
+    const [line, neck] = d.shapes as Extract<Shape, { kind: 'polyline' }>[];
+    expect(line!.points.map((p) => p.index)).toEqual([14, 20, 27, 33, 38]);
+    expect(neck!.points[0]).toEqual({ index: 20, price: 101.75 });
+    expect(neck!.points[1]!.index).toBe(44);
+    expect(d.tags.map((t) => [t.text, t.prefer])).toEqual([['LS', 'above'], ['Head', 'above'], ['RS', 'above']]);
+  });
+
+  it('inverted cup and handle (not class method): dome curve, shaded handle box, neckline; tags Dome / Handle', () => {
+    const candles = [...Array.from({ length: 31 }, (_, i) => bar(i, 100, 105)), bar(31, 100.2, 101.2), bar(32, 100.6, 101.8), bar(33, 101, 102.25), bar(34, 100.8, 102)];
+    const d = buildPatternDrawing({
+      candles,
+      points: [pt('left_rim', 10, 99.75), pt('dome_top', 20, 105.25), pt('right_rim', 30, 99.75), pt('handle_high', 33, 102.25)],
+      pattern: pattern({ type: 'inverted_cup_and_handle', direction: 'bearish', triggerLevel: 99.75 }),
+    })!;
+    expect(d.shapes.map((s) => s.kind)).toEqual(['curve', 'box', 'polyline']);
+    expect(d.shapes[0]).toEqual({ kind: 'curve', from: { index: 10, price: 99.75 }, via: { index: 20, price: 105.25 }, to: { index: 30, price: 99.75 } });
+    expect(d.shapes[1]).toEqual({ kind: 'box', from: 31, to: 34, top: 102.25, bottom: 100.2 });
+    expect(d.tags.map((t) => [t.text, t.prefer])).toEqual([['Dome', 'above'], ['Handle', 'below']]);
+    expect(d.summary).toBe('Inverted cup and handle drawn: dome curve, handle box, neckline. Tags: Dome, Handle.');
+  });
+
   it('returns null when key points are missing from this chart (e.g. other time frame)', () => {
     expect(buildPatternDrawing({ candles: [bar(0, 1, 2)], points: [], pattern: pattern({}) })).toBeNull();
   });

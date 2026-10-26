@@ -2,7 +2,7 @@ import type { Candle } from '../../providers/types.js';
 import { atr } from '../atr.js';
 import { findPivots } from './pivots.js';
 import type { PatternMatch, PatternSettings } from './types.js';
-import { argMaxHigh, argMinLow, hline, point, targetReached, tradingDays, windowStart } from './util.js';
+import { argMaxHigh, argMinLow, flipCandles, hline, point, targetReached, tradingDays, unflipMatch, windowStart } from './util.js';
 
 /**
  * Double top (bearish): two swing highs within peakTolAtr × ATR, with a dip at least dipDepthAtr × ATR
@@ -75,4 +75,14 @@ export function detectDoubleTop(candles: Candle[], s: PatternSettings): PatternM
     }
   }
   return null;
+}
+
+/**
+ * Double bottom (bullish; not from the class method) = double top on flipped prices: two lows within peakTolAtr,
+ * a peak between them ≥ dipDepthAtr above the higher low. Trigger = close above that peak (the neckline).
+ * Target = neckline + (neckline − average low). Invalid on a close below the lower low.
+ */
+export function detectDoubleBottom(candles: Candle[], s: PatternSettings): PatternMatch | null {
+  const m = detectDoubleTop(flipCandles(candles), s);
+  return m ? unflipMatch(m, 'double_bottom', 'bullish', { peak_1: 'bottom_1', dip: 'peak', peak_2: 'bottom_2' }) : null;
 }

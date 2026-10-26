@@ -1,12 +1,14 @@
 import type { Candle } from '../../providers/types.js';
 import { atr } from '../atr.js';
-import type { PatternMatch, PatternSettings, PricePoint } from './types.js';
-import { argMaxHigh, argMinLow, hline, point, targetReached, tradingDays, windowStart } from './util.js';
+import type { PatternMatch, PatternSettings } from './types.js';
+import { argMaxHigh, argMinLow, fitChannel, flipCandles, hline, point, targetReached, tradingDays, unflipMatch, windowStart } from './util.js';
 
 /**
- * Bull flag: a pole rising ≥ poleMinAtr × ATR within poleMaxBars candles, then a flag of
- * flagMinBars–flagMaxBars candles that stays under the pole top and retraces ≤ flagMaxRetrace of the
- * pole. Trigger = close above the flag high. Target = flag high + pole height.
+ * Bull flag: a pole rising ≥ poleMinAtr × ATR within poleMaxBars candles, then a flag of flagMinBars up to
+ * min(flagMaxBars, flagPoleMultiple × pole candles) candles that stays under the pole top, retraces ≤
+ * flagMaxRetrace of the pole, and forms a tight parallel channel sloping down or flat (slope ≤ flagMaxSlopeAtr ×
+ * ATR per candle, height ≤ flagMaxHeightFraction × pole). Trigger = close above the flag high.
+ * Target = flag high + pole height.
  */
 export function detectBullFlag(candles: Candle[], s: PatternSettings): PatternMatch | null {
   const ranges = atr(candles, s.atrPeriod);
@@ -24,6 +26,7 @@ export function detectBullFlag(candles: Candle[], s: PatternSettings): PatternMa
     if (range == null || rise < s.poleMinAtr * range) continue;
 
     const floor = top - s.flagMaxRetrace * rise;
+    const maxFlag = Math.min(s.flagMaxBars, Math.floor(s.flagPoleMultiple * (t - base)));
     let flagHigh = -Infinity;
     let extreme = -1;
     let triggerIndex: number | null = null;
@@ -35,7 +38,7 @@ export function detectBullFlag(candles: Candle[], s: PatternSettings): PatternMa
         triggerIndex = k;
         break;
       }
-      if (flagLen + 1 > s.flagMaxBars || c.high > top || c.low < floor) {
+      if (flagLen + 1 > maxFlag || c.high > top || c.low < floor) {
         valid = false;
         break;
       }
@@ -43,6 +46,10 @@ export function detectBullFlag(candles: Candle[], s: PatternSettings): PatternMa
       if (extreme < 0 || c.low < candles[extreme]!.low) extreme = k;
     }
     if (!valid || extreme < 0) continue;
+    // Shape: a tight parallel channel sloping against the pole (down or flat for a bull flag).
+    const channel = fitChannel(candles, t + 1, (triggerIndex ?? last + 1) - 1);
+    if (channel.slope > s.flagMaxSlopeAtr * range) continue;
+    if (channel.upper - channel.lower > s.flagMaxHeightFraction * rise) continue;
     if (tradingDays(candles, base, extreme) > s.maxSpanDays) continue;
     if (triggerIndex != null && triggerIndex < candles.length - s.recentTriggerBars) continue;
     const target = flagHigh + rise;
@@ -76,18 +83,6 @@ export function detectBullFlag(candles: Candle[], s: PatternSettings): PatternMa
 
 /** Bear flag = bull flag on price-negated candles, mapped back. */
 export function detectBearFlag(candles: Candle[], s: PatternSettings): PatternMatch | null {
-  const flipped = candles.map((c) => ({ ...c, open: -c.open, close: -c.close, high: -c.low, low: -c.high }));
-  const m = detectBullFlag(flipped, s);
-  if (!m) return null;
-  const flip = <P extends PricePoint>(p: P): P => ({ ...p, price: -p.price });
-  return {
-    ...m,
-    type: 'bear_flag',
-    direction: 'bearish',
-    points: m.points.map(flip),
-    lines: m.lines.map((l) => ({ ...l, from: flip(l.from), to: flip(l.to) })),
-    triggerLevel: -m.triggerLevel,
-    target: -m.target,
-    invalidation: -m.invalidation,
-  };
+  const m = detectBullFlag(flipCandles(candles), s);
+  return m ? unflipMatch(m, 'bear_flag', 'bearish') : null;
 }

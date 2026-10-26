@@ -29,6 +29,15 @@ describe('pattern span cap (maxSpanDays)', () => {
     expect(detectPatterns(daily(candles), settings).map((m) => m.type)).toContain(type);
   });
 
+  it('an armed pattern disappears once its first key point is more than 5 trading days old', () => {
+    const c = fx.doubleTopArmed;
+    const last = c.at(-1)!;
+    // six more sessions of quiet trading between the dip and the peaks: still armed, but too old to act on
+    const later = Array.from({ length: 6 }, (_, i) => ({ ...last, time: last.time + (i + 1) * 86_400, open: 107, high: 107.2, low: 106.8, close: 107 }));
+    expect(detectPatterns(c).map((m) => m.type)).toContain('double_top');
+    expect(detectPatterns([...c, ...later]).map((m) => m.type)).not.toContain('double_top');
+  });
+
   it('defaults to 5 trading days', () => {
     expect(DEFAULT_PATTERN_SETTINGS.maxSpanDays).toBe(5);
   });

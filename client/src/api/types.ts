@@ -91,6 +91,9 @@ export interface HistoryPayload {
   currentVersion: number;
   versions: { version: number; savedAt: number; changes: SettingsChange[]; note: string | null }[];
   summary: { current: HistorySummary; allTime: HistorySummary };
+  /** per pattern type; absent from servers before this field existed */
+  byPattern?: { current: Record<string, HistorySummary>; allTime: Record<string, HistorySummary> };
+  notClassMethod?: string[];
   signals: HistorySignal[];
 }
 

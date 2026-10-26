@@ -37,7 +37,7 @@ describe('detectCupAndHandle', () => {
     expect(detect(fx.cupHandleDeepHandle)).toBeNull();
   });
 
-  it('near miss: right rim 2 below the neckline (> 0.5 ATR)', () => {
+  it('near miss: right rim 2 below the left rim (> 1.5 × ATR)', () => {
     expect(detect(fx.cupHandleLowRightRim)).toBeNull();
   });
 

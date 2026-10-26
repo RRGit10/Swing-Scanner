@@ -33,6 +33,8 @@ describe('validateSettings', () => {
     [{ ema: { reversalTolerance: 0.5 } }, 'ema.reversalTolerance: must be between 0.0001 and 0.05'],
     [{ patterns: { pivotN: 0 } }, 'patterns.pivotN: must be between 1 and 10'],
     [{ patterns: { flagMinBars: 9, flagMaxBars: 8 } }, 'patterns.flagMaxBars: must be at least the minimum flag length (9)'],
+    [{ patterns: { cupMaxAvgHeight: 2 } }, 'patterns.cupMaxAvgHeight: must be between 0.05 and 0.9'],
+    [{ patterns: { flagMaxHeightFraction: 0 } }, 'patterns.flagMaxHeightFraction: must be between 0.05 and 1'],
     [{ contracts: { budget: 'lots' } }, 'contracts.budget: must be a number'],
   ])('rejects %j', (body, message) => {
     const r = validateSettings(body, DEFAULT_APP_SETTINGS);

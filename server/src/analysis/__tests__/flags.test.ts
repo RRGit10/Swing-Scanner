@@ -29,7 +29,7 @@ describe('detectBullFlag', () => {
     expect(bull(fx.bullFlagTooDeep)).toBeNull();
   });
 
-  it('near miss: 10 flag candles before the break', () => {
+  it('near miss: flag longer than 2× the pole (19 candles after a 9-candle pole)', () => {
     expect(bull(fx.bullFlagTooLong)).toBeNull();
   });
 

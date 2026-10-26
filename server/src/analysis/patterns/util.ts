@@ -1,7 +1,7 @@
 import { etClock } from '../../providers/et.js';
 import type { Candle } from '../../providers/types.js';
 import type { Direction } from '../types.js';
-import type { KeyPoint, PatternLine } from './types.js';
+import type { KeyPoint, PatternLine, PatternMatch, PatternType, PricePoint } from './types.js';
 
 /** Index of the lowest low in candles[from..to] (inclusive); first one on ties. */
 export function argMinLow(candles: Candle[], from: number, to: number): number {
@@ -45,4 +45,44 @@ export function tradingDays(candles: Candle[], from: number, to: number): number
 /** First index searched for patterns. */
 export function windowStart(candles: Candle[], lookback: number): number {
   return Math.max(0, candles.length - lookback);
+}
+
+/** Prices negated (highs ↔ lows): a bullish detector run on these finds the bearish mirror. */
+export function flipCandles(candles: Candle[]): Candle[] {
+  return candles.map((c) => ({ ...c, open: -c.open, close: -c.close, high: -c.low, low: -c.high }));
+}
+
+/** Map a match found on flipped candles back to real prices, as `type`/`direction`, renaming key points. */
+export function unflipMatch(m: PatternMatch, type: PatternType, direction: Direction, rename: Record<string, string> = {}): PatternMatch {
+  const flip = <P extends PricePoint>(p: P): P => ({ ...p, price: -p.price });
+  return {
+    ...m,
+    type,
+    direction,
+    points: m.points.map((p) => ({ ...flip(p), label: rename[p.label] ?? p.label })),
+    lines: m.lines.map((l) => ({ ...l, from: flip(l.from), to: flip(l.to) })),
+    triggerLevel: -m.triggerLevel,
+    target: -m.target,
+    invalidation: -m.invalidation,
+  };
+}
+
+/**
+ * Parallel channel over candles from..to: slope from a least-squares fit of the mid prices; `upper`/`lower`
+ * offsets put the lines on the highest high and lowest low (price = slope × index + offset).
+ */
+export function fitChannel(candles: Candle[], from: number, to: number): { slope: number; upper: number; lower: number } {
+  const idx = Array.from({ length: to - from + 1 }, (_, k) => from + k);
+  const mid = (i: number) => (candles[i]!.high + candles[i]!.low) / 2;
+  let slope = 0;
+  if (idx.length > 1) {
+    const mx = idx.reduce((a, i) => a + i, 0) / idx.length;
+    const my = idx.reduce((a, i) => a + mid(i), 0) / idx.length;
+    slope = idx.reduce((a, i) => a + (i - mx) * (mid(i) - my), 0) / idx.reduce((a, i) => a + (i - mx) ** 2, 0);
+  }
+  return {
+    slope,
+    upper: Math.max(...idx.map((i) => candles[i]!.high - slope * i)),
+    lower: Math.min(...idx.map((i) => candles[i]!.low - slope * i)),
+  };
 }

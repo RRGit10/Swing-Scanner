@@ -1,6 +1,7 @@
 import { classifyLastThree } from '../analysis/candles.js';
 import { emaSet, latestEmas } from '../analysis/ema.js';
-import { dailyEmasInPath, ema55Reversals, emaTable } from '../analysis/emaLevels.js';
+import { dailyEmasInPath, ema55Reversals, emaTable, type EmaTableRow } from '../analysis/emaLevels.js';
+import type { PatternMatch } from '../analysis/patterns/types.js';
 import { mergeTimeframes, type TimeframeMatch } from '../analysis/merge.js';
 import { detectPatterns } from '../analysis/patterns/index.js';
 import { patternTargets } from '../analysis/targets.js';
@@ -41,6 +42,8 @@ export interface ScanContext {
   /** trading days around today, to time the trigger candle's close */
   calendar: TradingDay[];
   settings: AppSettings;
+  /** T1 frozen in history when each signal's trigger was first seen (by signal key) */
+  frozenT1?: Map<string, number>;
 }
 
 export const TIMEFRAMES: IntradayTimeframe[] = ['15m', '30m', '1h'];
@@ -58,6 +61,19 @@ export function barCloseTime(barTime: number, tf: IntradayTimeframe, calendar: T
   return Math.min(barTime + TF_MINUTES[tf] * 60, sessionClose);
 }
 
+const keyOf = (symbol: string, m: PatternMatch) => `${symbol}|${m.type}|${m.direction}|${m.points[0]!.time}`;
+
+/**
+ * Display rule: a triggered pattern is removed once price has touched its T1 after the trigger candle. T1 is the
+ * one frozen in history at the trigger, else the first target counted from the trigger level.
+ */
+function t1Touched(m: PatternMatch, candles: Candle[], key: string, table: EmaTableRow[], ctx: ScanContext): boolean {
+  if (m.state !== 'triggered' || m.triggerIndex == null) return false;
+  const t1 = ctx.frozenT1?.get(key) ?? patternTargets(m, table, m.triggerLevel)[0]?.price;
+  if (t1 == null) return false;
+  return candles.slice(m.triggerIndex + 1).some((c) => (m.direction === 'bullish' ? c.high >= t1 : c.low <= t1));
+}
+
 /** Scan one ticker: patterns on 15m/30m/1h, merged; targets, candle bias, contract, status. Never throws. */
 export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContext): Promise<TickerEntry> {
   const s = ctx.settings;
@@ -73,7 +89,7 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
     const found: TimeframeMatch[] = TIMEFRAMES.flatMap((timeframe) =>
       detectPatterns(byTf[timeframe], s.patterns, s.candles).map((match) => ({ timeframe, match })),
     );
-    const merged = mergeTimeframes(found);
+    const merged = mergeTimeframes(found).filter((sig) => !t1Touched(sig.match, byTf[sig.tradingTimeframe], keyOf(symbol, sig.match), table, ctx));
     if (!merged.length || delayedPrice == null) return buildTickerEntry(base, []);
 
     const [expirations, earnings] = await Promise.all([
@@ -122,7 +138,7 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
 
       items.push({
         pattern: {
-          key: `${symbol}|${m.type}|${m.direction}|${m.points[0]!.time}`,
+          key: keyOf(symbol, m),
           type: m.type,
           direction: m.direction,
           timeframes: sig.timeframes,

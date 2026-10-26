@@ -3,6 +3,8 @@ import { useResource } from '../api/client';
 import type { HistoryPayload, HistorySignal, HistorySummary, Outcome, StatusPayload } from '../api/types';
 import { DirectionMark } from '../components/Marks';
 import { contractName, etDateTime, money, patternLabel, pct, signedPct } from '../lib/format';
+import { isClassMethod } from '../lib/patterns';
+import { Badge } from '../components/Marks';
 
 const OUTCOME_TEXT: Record<Outcome, string> = {
   win: 'T1 hit',
@@ -51,6 +53,7 @@ export function History({ status }: { status: StatusPayload | null }) {
       </div>
 
       <HitRates summary={data.summary[scope]} />
+      {data.byPattern && <ByPattern rows={data.byPattern[scope]} />}
 
       <details className="mt-5 text-sm">
         <summary className="cursor-pointer text-ink-2">Settings versions ({data.versions.length})</summary>
@@ -94,7 +97,7 @@ export function History({ status }: { status: StatusPayload | null }) {
         </p>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[60rem] border-collapse text-sm">
+          <table aria-label="Signal log" className="w-full min-w-[60rem] border-collapse text-sm">
             <thead>
               <tr className="border-b border-rule text-left text-ink-2">
                 {['Ticker', 'Pattern', 'First seen', 'Triggered', 'Contract', 'Entry ask', 'Lowest in zone', 'T1', 'Outcome', 'Gain (indicative)'].map((h) => (
@@ -139,6 +142,39 @@ export function History({ status }: { status: StatusPayload | null }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ByPattern({ rows }: { rows: Record<string, HistorySummary> }) {
+  const entries = Object.entries(rows);
+  if (!entries.length) return null;
+  return (
+    <div className="mt-6 max-w-5xl overflow-x-auto">
+      <table className="w-full min-w-[40rem] border-collapse text-sm">
+        <caption className="mb-2 text-left text-[15px] font-semibold text-ink">Hit rate by pattern</caption>
+        <thead>
+          <tr className="border-b border-rule text-left text-ink-2">
+            <th className="py-1.5 pr-4 font-normal">Pattern</th>
+            <th className="py-1.5 pr-4 font-normal">Pattern hit rate</th>
+            <th className="py-1.5 pr-4 font-normal">Tradeable hit rate</th>
+            <th className="py-1.5 font-normal">Avg gain (indicative)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([type, s]) => (
+            <tr key={type} className="border-b border-rule/60">
+              <th scope="row" className="py-1.5 pr-4 text-left font-semibold">
+                {patternLabel(type)}{' '}
+                {!isClassMethod(type) && <Badge tone="warn">Not from the class method</Badge>}
+              </th>
+              <td className="py-1.5 pr-4">{s.pattern.resolved ? `${pct(s.pattern.hitRate)} (${s.pattern.wins} of ${s.pattern.resolved})` : <span className="text-ink-3">none resolved</span>}</td>
+              <td className="py-1.5 pr-4">{s.tradeable.resolved ? `${pct(s.tradeable.hitRate)} (${s.tradeable.wins} of ${s.tradeable.resolved})` : <span className="text-ink-3">none resolved</span>}</td>
+              <td className="py-1.5">{s.tradeable.gainSamples ? signedPct(s.tradeable.avgGainPct) : <span className="text-ink-3">—</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
