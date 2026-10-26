@@ -8,11 +8,13 @@ import { emaTable } from '../src/analysis/emaLevels.js';
 import { mergeTimeframes, type TimeframeMatch } from '../src/analysis/merge.js';
 import { detectPatterns } from '../src/analysis/patterns/index.js';
 import { patternTargets } from '../src/analysis/targets.js';
+import { previousSessionDate } from '../src/contracts/liquidity.js';
 import { selectContract } from '../src/contracts/select.js';
+import { AlpacaMarketProvider } from '../src/market/clock.js';
 import { DEFAULT_CONTRACT_SETTINGS, type ContractResult } from '../src/contracts/types.js';
 import { aggregate15m } from '../src/providers/aggregate.js';
 import { addDays, etClock, etToday } from '../src/providers/et.js';
-import { createProviders } from '../src/providers/index.js';
+import { createAlpacaClient, createProviders } from '../src/providers/index.js';
 import type { Candle, IntradayTimeframe, OptionContract } from '../src/providers/types.js';
 import { DEFAULT_WATCHLIST } from '../src/watchlist.js';
 
@@ -38,6 +40,13 @@ const monthDay = (date: string) =>
 /** e.g. "SPY 755P Nov 6" */
 const contractName = (c: OptionContract) => `${c.underlying} ${c.strike}${c.type === 'call' ? 'C' : 'P'} ${monthDay(c.expiration)}`;
 
+function liquidityText(r: Extract<ContractResult, { kind: 'pick' }>): string {
+  const l = r.liquidity;
+  const oi = `OI ${l.openInterest} (${l.openInterestDate ?? 'no date'})`;
+  if (!l.stale) return oi;
+  return l.source === 'volume' ? `liquidity: prev-session volume ${l.volume} (${l.volumeDate}), ${oi} stale` : `liquidity: ${oi} stale`;
+}
+
 function printContract(r: ContractResult) {
   for (const sk of r.skippedExpirations) console.log(`  skipped ${sk.expiration}: ${sk.reason}`);
   if (r.kind === 'none') {
@@ -47,7 +56,7 @@ function printContract(r: ContractResult) {
   const c = r.contract;
   const e = r.entry;
   console.log(
-    `  CONTRACT: ${contractName(c)} (exp ${r.expiration}, ${r.dte}d) | Δ ${c.delta!.toFixed(3)} grade ${r.grade} | ask ${f(c.ask!)} [${OPTION_PRICE_LABEL}] | OI ${c.openInterest}` +
+    `  CONTRACT: ${contractName(c)} (exp ${r.expiration}, ${r.dte}d) | Δ ${c.delta!.toFixed(3)} grade ${r.grade} | ask ${f(c.ask!)} [${OPTION_PRICE_LABEL}] | ${liquidityText(r)}` +
       (r.earningsDate ? ` | ⚠ EARNINGS ${r.earningsDate} before expiration` : ''),
   );
   console.log(
@@ -66,6 +75,7 @@ function printContract(r: ContractResult) {
 async function main() {
   const p = createProviders();
   const today = etToday();
+  const calendar = await new AlpacaMarketProvider(createAlpacaClient()).getCalendar(addDays(today, -14), today);
   const quiet: string[] = [];
   let total = 0;
 
@@ -97,7 +107,7 @@ async function main() {
     ]);
     const chainCache = new Map<string, Promise<OptionContract[]>>();
     const getChain = (exp: string) => {
-      if (!chainCache.has(exp)) chainCache.set(exp, p.options.getChain(symbol, exp));
+      if (!chainCache.has(exp)) chainCache.set(exp, p.options.getChain(symbol, exp, { oiFreshAsOf: previousSessionDate(calendar, sessionDate) }));
       return chainCache.get(exp)!;
     };
 
@@ -126,6 +136,7 @@ async function main() {
           expirations,
           today,
           sessionDate,
+          previousSession: previousSessionDate(calendar, sessionDate),
           targets,
           triggered: m.state === 'triggered',
           newestCandleNames: newest?.names ?? [],

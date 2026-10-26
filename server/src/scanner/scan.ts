@@ -5,6 +5,7 @@ import { mergeTimeframes, type TimeframeMatch } from '../analysis/merge.js';
 import { detectPatterns } from '../analysis/patterns/index.js';
 import { patternTargets } from '../analysis/targets.js';
 import { fridayExpirations } from '../contracts/expiration.js';
+import { previousSessionDate } from '../contracts/liquidity.js';
 import { selectContract } from '../contracts/select.js';
 import type { TradingDay } from '../market/clock.js';
 import { lowerQuality } from '../market/timing.js';
@@ -81,9 +82,10 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
         deps.earnings.getEarnings(symbol, ctx.today, addDays(ctx.today, s.contracts.maxDte)),
       ),
     ]);
+    const previousSession = previousSessionDate(ctx.calendar, ctx.sessionDate);
     const chains = new Map<string, Promise<OptionContract[]>>();
     const getChain = (exp: string) => {
-      if (!chains.has(exp)) chains.set(exp, deps.options.getChain(symbol, exp));
+      if (!chains.has(exp)) chains.set(exp, deps.options.getChain(symbol, exp, { oiFreshAsOf: previousSession }));
       return chains.get(exp)!;
     };
 
@@ -103,6 +105,7 @@ export async function scanTicker(deps: ScanDeps, symbol: string, ctx: ScanContex
           expirations,
           today: ctx.today,
           sessionDate: ctx.sessionDate,
+          previousSession,
           targets,
           triggered: m.state === 'triggered',
           newestCandleNames: labels.labels.at(-1)?.names ?? [],

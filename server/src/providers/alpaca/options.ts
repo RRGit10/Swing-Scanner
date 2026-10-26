@@ -6,11 +6,13 @@ import type { AlpacaClient } from './client.js';
 
 /** How far ahead getExpirations looks; the method only uses 7–30 days. */
 const EXPIRATION_WINDOW_DAYS = 60;
+const OI_RECHECK_MS = 60 * 60 * 1000;
 
 interface AlpacaSnapshot {
   latestQuote?: { ap?: number; bp?: number; t?: string } | null;
   latestTrade?: { p?: number } | null;
   dailyBar?: { h?: number; l?: number; v?: number; t?: string } | null;
+  prevDailyBar?: { v?: number; t?: string } | null;
   greeks?: { delta?: number; gamma?: number; theta?: number } | null;
   impliedVolatility?: number | null;
 }
@@ -52,6 +54,7 @@ export function mapSnapshots(body: unknown): OptionContract[] {
     const occ = parseOcc(symbol);
     if (!occ) continue;
     const dayBarTime = s.dailyBar?.t ? Date.parse(s.dailyBar.t) / 1000 : null;
+    const prevBarTime = s.prevDailyBar?.t ? Date.parse(s.prevDailyBar.t) / 1000 : null;
     out.push({
       symbol,
       ...occ,
@@ -62,6 +65,8 @@ export function mapSnapshots(body: unknown): OptionContract[] {
       dayHigh: num(s.dailyBar?.h),
       dayBarDate: dayBarTime == null ? null : etClock(dayBarTime).date,
       volume: num(s.dailyBar?.v) ?? 0,
+      prevDayVolume: num(s.prevDailyBar?.v),
+      prevDayBarDate: prevBarTime == null ? null : etClock(prevBarTime).date,
       openInterest: 0,
       openInterestDate: null,
       delta: num(s.greeks?.delta),
@@ -100,9 +105,12 @@ export function joinOpenInterest(chain: OptionContract[], contracts: ContractOpe
 }
 
 export class AlpacaOptionsProvider implements OptionsProvider {
-  private readonly oiCache = new Map<string, { date: string; value: Promise<ContractOpenInterest[]> }>();
+  private readonly oiCache = new Map<string, OiEntry>();
 
-  constructor(private readonly client: AlpacaClient) {}
+  constructor(
+    private readonly client: AlpacaClient,
+    private readonly log: (msg: string) => void = () => {},
+  ) {}
 
   async getExpirations(symbol: string): Promise<string[]> {
     const today = etToday();
@@ -116,14 +124,14 @@ export class AlpacaOptionsProvider implements OptionsProvider {
     return mapExpirations(pages.flatMap(mapContracts));
   }
 
-  async getChain(symbol: string, expiration: string): Promise<OptionContract[]> {
+  async getChain(symbol: string, expiration: string, opts: { oiFreshAsOf?: string | null } = {}): Promise<OptionContract[]> {
     const [snapshotPages, openInterest] = await Promise.all([
       this.client.getAllPages('data', `/v1beta1/options/snapshots/${symbol}`, {
         feed: config.optionsFeed,
         expiration_date: expiration,
         limit: '1000',
       }),
-      this.openInterest(symbol, expiration),
+      this.openInterest(symbol, expiration, opts.oiFreshAsOf ?? null),
     ]);
     const chain = snapshotPages.flatMap(mapSnapshots).sort((a, b) => a.strike - b.strike || a.type.localeCompare(b.type));
     return joinOpenInterest(chain, openInterest);
@@ -142,28 +150,52 @@ export class AlpacaOptionsProvider implements OptionsProvider {
         strike_price_lte: String(occ.strike),
         limit: '1000',
       }),
-      this.openInterest(occ.underlying, occ.expiration),
+      this.openInterest(occ.underlying, occ.expiration, null),
     ]);
     const found = pages.flatMap(mapSnapshots).filter((c) => c.symbol === occSymbol);
     return joinOpenInterest(found, openInterest)[0] ?? null;
   }
 
-  /** Open interest is published once a day, so it is fetched once per underlying + expiration per ET date. */
-  private openInterest(symbol: string, expiration: string): Promise<ContractOpenInterest[]> {
+  /**
+   * Open interest is published once a day, so it is fetched once per underlying + expiration per ET date —
+   * except while its newest date is older than `freshAsOf` (the previous session): then it is re-checked
+   * about hourly until Alpaca publishes the newer figures. Date changes are logged.
+   */
+  private openInterest(symbol: string, expiration: string, freshAsOf: string | null): Promise<ContractOpenInterest[]> {
     const key = `${symbol}|${expiration}`;
     const today = etToday();
     const cached = this.oiCache.get(key);
-    if (cached?.date === today) return cached.value;
-    const value = this.client
-      .getAllPages('paper', '/v2/options/contracts', {
-        underlying_symbols: symbol,
-        status: 'active',
-        expiration_date: expiration,
-        limit: '10000',
-      })
-      .then((pages) => pages.flatMap(mapContracts));
-    this.oiCache.set(key, { date: today, value });
-    value.catch(() => this.oiCache.get(key)?.value === value && this.oiCache.delete(key));
-    return value;
+    const stale = (e: OiEntry) => freshAsOf != null && e.newest !== undefined && (e.newest ?? '') < freshAsOf;
+    if (cached?.date === today && !(stale(cached) && Date.now() - cached.fetchedAt >= OI_RECHECK_MS)) return cached.value;
+
+    const entry: OiEntry = {
+      date: today,
+      fetchedAt: Date.now(),
+      value: this.client
+        .getAllPages('paper', '/v2/options/contracts', { underlying_symbols: symbol, status: 'active', expiration_date: expiration, limit: '10000' })
+        .then((pages) => pages.flatMap(mapContracts)),
+    };
+    entry.value.then(
+      (list) => {
+        entry.newest = list.map((c) => c.openInterestDate).filter((d): d is string => d != null).sort().at(-1) ?? null;
+        if (cached?.newest && entry.newest && entry.newest !== cached.newest) {
+          const t = etClock(Date.now() / 1000).minutes;
+          const hhmm = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+          this.log(`open interest ${symbol} ${expiration}: date ${cached.newest} → ${entry.newest} (seen ${hhmm} ET)`);
+        }
+      },
+      () => this.oiCache.get(key) === entry && (cached ? this.oiCache.set(key, cached) : this.oiCache.delete(key)),
+    );
+    this.oiCache.set(key, entry);
+    return entry.value;
   }
+}
+
+interface OiEntry {
+  /** ET date fetched */
+  date: string;
+  fetchedAt: number;
+  value: Promise<ContractOpenInterest[]>;
+  /** newest open_interest_date in the response (undefined until it arrives) */
+  newest?: string | null;
 }

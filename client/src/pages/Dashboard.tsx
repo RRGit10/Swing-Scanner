@@ -1,5 +1,6 @@
 import { useResource } from '../api/client';
 import type { ContractPick, PatternEntry, SignalsPayload, StatusPayload, TickerEntry } from '../api/types';
+import { LiquidityLine } from '../components/LiquidityLine';
 import { Badge, DirectionMark, StatusTag } from '../components/Marks';
 import { PathStrip } from '../components/PathStrip';
 import { estAtT1, NoContract, PatternBadges, triggerText } from '../components/PatternBits';
@@ -131,8 +132,8 @@ function ContractPanel({ pick, users }: { pick: ContractPick; users: PatternEntr
         <span>
           Ask <span className="text-base font-semibold">{money(c.ask)}</span>
         </span>
-        <span className="text-ink-3">OI {c.openInterest.toLocaleString()}</span>
       </div>
+      <LiquidityLine pick={pick} className="mt-1 text-sm text-ink-2" />
       <p className="text-xs text-ink-3">{OPTION_PRICE_LABEL}</p>
       <div className="mt-2">
         <RangeStrip pick={pick} />

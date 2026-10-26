@@ -1,6 +1,7 @@
 import type { ContractPick, PatternEntry } from '../api/types';
 import { OPTION_PRICE_LABEL } from '../labels';
 import { contractName, fixed, money, shortDate, signedPct } from '../lib/format';
+import { LiquidityLine } from './LiquidityLine';
 import { Badge } from './Marks';
 import { NoContract } from './PatternBits';
 import { RangeStrip } from './RangeStrip';
@@ -35,9 +36,9 @@ export function ContractCard({ pick, pattern }: { pick: ContractPick | null; pat
         </dd>
         <dt className="text-ink-2">Greeks</dt>
         <dd>Γ {fixed(c.gamma, 4)}, Θ {fixed(c.theta, 3)}/day, IV {c.iv != null ? `${(c.iv * 100).toFixed(1)}%` : '—'}</dd>
-        <dt className="text-ink-2">Open interest</dt>
+        <dt className="text-ink-2">Liquidity</dt>
         <dd>
-          {c.openInterest.toLocaleString()} <span className="text-ink-3">({c.openInterestDate ?? 'date unknown'})</span>
+          <LiquidityLine pick={pick} labeled />
         </dd>
       </dl>
 

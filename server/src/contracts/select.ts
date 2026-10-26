@@ -4,6 +4,7 @@ import type { Direction } from '../analysis/types.js';
 import type { EarningsEvent, OptionContract } from '../providers/types.js';
 import { daysBetween, earningsBeforeExpiration, fridayExpirations } from './expiration.js';
 import { buildExitPlan, entryStatus, estimateAt } from './exitPlan.js';
+import { liquidity } from './liquidity.js';
 import type { ContractResult, ContractSettings, Grade, SkippedExpiration } from './types.js';
 
 export interface SelectionInput {
@@ -14,6 +15,8 @@ export interface SelectionInput {
   today: string;
   /** date of the current (or, when closed, most recent) trading session */
   sessionDate: string;
+  /** the trading day before sessionDate: OI older than this is stale (null = unknown, OI used as is) */
+  previousSession: string | null;
   /** stock targets, nearest first; T1 drives the gain-at-target check */
   targets: Target[];
   /** the pattern's trigger has fired ("price already moving the right way") */
@@ -48,12 +51,13 @@ function rejection(c: OptionContract, input: SelectionInput, t1: number): string
   if (c.ask == null || c.ask <= 0) return 'no ask';
   if (c.ask < s.minPremium) return `under $${s.minPremium.toFixed(2)}`;
   if (c.ask * 100 > s.budget) return 'over budget';
-  if (c.openInterest < s.minOpenInterest) return `OI < ${s.minOpenInterest}`;
+  const liq = liquidity(c, input.previousSession).value;
+  if (liq < s.minOpenInterest) return `liquidity < ${s.minOpenInterest}`;
   const grade = gradeFor(c.delta, s);
   if (!grade) return `delta < ${s.gradeC}`;
   if (
     grade === 'C' &&
-    !(isPowerCandle(input.newestCandleNames, input.direction) && input.triggered && c.openInterest >= s.gradeCMinOpenInterest)
+    !(isPowerCandle(input.newestCandleNames, input.direction) && input.triggered && liq >= s.gradeCMinOpenInterest)
   ) {
     return 'grade C conditions not met';
   }
@@ -95,12 +99,13 @@ export async function selectContract(
     }
 
     const contract = passing.sort(
-      (a, b) => Math.abs(b.delta!) - Math.abs(a.delta!) || a.ask! - b.ask! || b.openInterest - a.openInterest,
+      (a, b) => Math.abs(b.delta!) - Math.abs(a.delta!) || a.ask! - b.ask! || liquidity(b, input.previousSession).value - liquidity(a, input.previousSession).value,
     )[0]!;
     return {
       kind: 'pick',
       contract,
       grade: gradeFor(contract.delta!, s)!,
+      liquidity: liquidity(contract, input.previousSession),
       expiration,
       dte: daysBetween(input.today, expiration),
       entry: entryStatus(contract, input.sessionDate, s),

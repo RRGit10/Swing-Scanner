@@ -32,7 +32,7 @@ export function createProviders(): Providers {
   const finnhub = new FinnhubClient(requireEnv('FINNHUB_API_KEY'), finnhubLimiter);
   return {
     candles: new AlpacaCandleProvider(alpaca),
-    options: new AlpacaOptionsProvider(alpaca),
+    options: new AlpacaOptionsProvider(alpaca, (m) => console.log(`[oi] ${m}`)),
     quotes: new FinnhubQuoteProvider(finnhub),
     earnings: new FinnhubEarningsProvider(finnhub),
     company: new FinnhubCompanyProvider(finnhub),

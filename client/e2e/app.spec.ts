@@ -80,6 +80,10 @@ test('signals: each ticker card has its logo (or letter badge), Open chart, and 
     expect(await panels.count()).toBeGreaterThan(0);
     for (const panel of await panels.all()) {
       await expect(panel.getByText(/indicative \(modeled\), 15-min delayed|No contract fits/).first()).toBeVisible();
+      // a contract shows its OI with a date, or the liquidity figure used and a stale flag
+      if (await panel.getByText('indicative (modeled), 15-min delayed').count()) {
+        await expect(panel.getByText(/^(OI [\d,]+ \(\w{3} \w{3} \d+\)|Liquidity: .+)$/).first()).toBeVisible();
+      }
     }
   }
 

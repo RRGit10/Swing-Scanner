@@ -13,6 +13,7 @@ function input(over: Partial<SelectionInput> = {}): SelectionInput {
     expirations: FRIDAYS,
     today: TODAY,
     sessionDate: SESSION,
+    previousSession: '2026-10-22',
     targets: [{ kind: 'pattern', label: 'Pattern target', price: 110 }],
     triggered: false,
     newestCandleNames: [],
@@ -85,6 +86,35 @@ describe('selectContract: filters', () => {
       opt({ type: 'call', strike: 98.5, ask: 2.8, delta: 0.6, openInterest: 800 }),
     ]);
     expect(r?.contract.strike).toBe(98.5);
+  });
+});
+
+describe('selectContract: stale open interest → liquidity = max(OI, previous-session volume)', () => {
+  const MON = { today: '2026-10-26', sessionDate: '2026-10-26', previousSession: '2026-10-23' };
+  const stale = { openInterestDate: '2026-10-22', prevDayBarDate: '2026-10-23', dayBarDate: '2026-10-26' };
+
+  it('stale OI + high previous-session volume passes the floor and is reported on the pick', async () => {
+    const r = await pick([opt({ type: 'call', strike: 100, ask: 2.5, delta: 0.6, openInterest: 40, prevDayVolume: 46519, ...stale })], MON);
+    expect(r?.liquidity).toMatchObject({ value: 46519, source: 'volume', stale: true, openInterest: 40, openInterestDate: '2026-10-22' });
+  });
+
+  it('stale OI + low volume fails the floor', async () => {
+    expect(await pick([opt({ type: 'call', strike: 100, ask: 2.5, delta: 0.6, openInterest: 40, prevDayVolume: 60, ...stale })], MON)).toBeNull();
+  });
+
+  it('grade C uses the same liquidity: high volume passes ≥ 1000, low volume does not', async () => {
+    const c = { type: 'call' as const, strike: 105, ask: 0.9, delta: 0.29, openInterest: 400, ...stale };
+    const power = { ...MON, triggered: true, newestCandleNames: ['boom_boom'] as const };
+    expect(await pick([opt({ ...c, prevDayVolume: 1500 })], power)).toMatchObject({ grade: 'C', liquidity: { value: 1500, source: 'volume' } });
+    expect(await pick([opt({ ...c, prevDayVolume: 999 })], power)).toBeNull();
+  });
+
+  it('fresh OI is unchanged: volume is ignored even when larger', async () => {
+    const fresh = { openInterestDate: '2026-10-23', prevDayBarDate: '2026-10-23', dayBarDate: '2026-10-26' };
+    expect(await pick([opt({ type: 'call', strike: 100, ask: 2.5, delta: 0.6, openInterest: 99, prevDayVolume: 50000, ...fresh })], MON)).toBeNull();
+    expect(await pick([opt({ type: 'call', strike: 100, ask: 2.5, delta: 0.6, openInterest: 150, prevDayVolume: 50000, ...fresh })], MON)).toMatchObject({
+      liquidity: { value: 150, source: 'oi', stale: false },
+    });
   });
 });
 

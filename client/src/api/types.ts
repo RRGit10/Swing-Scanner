@@ -17,14 +17,22 @@ export interface CandleLabel { time: number; names: string[]; bias: 'bullish' | 
 export interface OptionContract {
   symbol: string; underlying: string; type: 'call' | 'put'; strike: number; expiration: string;
   bid: number | null; ask: number | null; last: number | null; dayLow: number | null; dayHigh: number | null;
-  dayBarDate: string | null; volume: number; openInterest: number; openInterestDate: string | null;
+  dayBarDate: string | null; volume: number; prevDayVolume?: number | null; prevDayBarDate?: string | null;
+  openInterest: number; openInterestDate: string | null;
   delta: number | null; gamma: number | null; theta: number | null; iv: number | null; quoteTime: string | null;
 }
 export interface ExitTarget { label: string; stockPrice: number; estimate: number; estimateChangePct: number }
 export interface ExitPlan { breakEven: number; markers: { pct: number; price: number }[]; targets: ExitTarget[] }
 export interface Skipped { expiration: string; reason: string }
+/** what the OI floor and grade C checks used: OI, or previous-session volume when OI is stale */
+export interface Liquidity {
+  value: number; source: 'oi' | 'volume'; stale: boolean; openInterest: number; openInterestDate: string | null;
+  volume: number | null; volumeDate: string | null;
+}
 export interface ContractPick {
   kind: 'pick'; contract: OptionContract; grade: 'A' | 'B' | 'C'; expiration: string; dte: number;
+  /** absent in scans saved before this field existed */
+  liquidity?: Liquidity;
   entry: { zone: { low: number; high: number } | null; status: 'AT ENTRY' | 'ABOVE ENTRY ZONE' | 'NO CURRENT RANGE' };
   exitPlan: ExitPlan; earningsDate: string | null; skippedExpirations: Skipped[];
 }

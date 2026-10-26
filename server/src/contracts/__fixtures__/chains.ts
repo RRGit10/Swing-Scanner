@@ -25,6 +25,8 @@ export function opt(p: Partial<OptionContract> & Pick<OptionContract, 'type' | '
     gamma: 0.05,
     theta: -0.05,
     iv: 0.2,
+    prevDayVolume: null,
+    prevDayBarDate: null,
     quoteTime: '2026-10-23T19:59:00Z',
     ...p,
   };

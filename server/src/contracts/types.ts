@@ -1,4 +1,5 @@
 import type { OptionContract } from '../providers/types.js';
+import type { Liquidity } from './liquidity.js';
 
 export interface ContractSettings {
   /** per-trade budget in dollars: ask × 100 must not exceed it */
@@ -69,6 +70,8 @@ export interface ContractPick {
   kind: 'pick';
   contract: OptionContract;
   grade: Grade;
+  /** what the OI floor and grade C checks used (OI, or previous-session volume when OI is stale) */
+  liquidity: Liquidity;
   expiration: string;
   dte: number;
   entry: EntryStatus;

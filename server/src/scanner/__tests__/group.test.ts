@@ -13,6 +13,7 @@ function pattern(over: Partial<PatternEntry>): Omit<PatternEntry, 'contract'> {
 
 const pick = (strike: number): ContractResult => ({
   kind: 'pick', contract: opt({ type: 'put', strike }), grade: 'B', expiration: '2026-10-30', dte: 5,
+  liquidity: { value: 5000, source: 'oi', stale: false, openInterest: 5000, openInterestDate: '2026-10-22', volume: null, volumeDate: null },
   entry: { zone: null, status: 'NO CURRENT RANGE' }, exitPlan: { breakEven: 0, markers: [], targets: [] },
   earningsDate: null, skippedExpirations: [],
 });

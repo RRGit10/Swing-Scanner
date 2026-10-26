@@ -58,7 +58,7 @@ Do NOT substitute generic indicators (RSI, MACD, Bollinger, etc.) or invent stra
 - Delta grades:
   - ≥ 0.57 → A (preferred)
   - 0.30–0.56 → B (when A strikes exceed budget)
-  - 0.28–0.29 → C, only with strong candle bias, high OI (default ≥ 1000), and price already moving the right way. Previous-day open interest is acceptable for OI checks.
+  - 0.28–0.29 → C, only with strong candle bias, high OI (default ≥ 1000), and price already moving the right way. Previous-day open interest is acceptable for OI checks (older OI: see stale open interest below).
   - < 0.28 → rejected, never shown
   - Contracts without greeks/IV are skipped: no delta grade, not shown.
   - Pick the highest-delta contract that fits the budget.
@@ -68,6 +68,8 @@ Do NOT substitute generic indicators (RSI, MACD, Bollinger, etc.) or invent stra
   - Spreads: deferred, not in v1.
   - Expiration: start with the nearest Friday ≥ 3 calendar days out (ET). If no contract passes all checks there, try each later Friday up to 30 days and use the first expiration where one passes. Show which expiration was used and why earlier ones were skipped. If a Friday is a market holiday, use that week's Thursday. The earnings flag applies to the expiration actually picked (any earnings date from today through expiration day).
   - Skip: missing delta, gamma, theta or IV; missing/zero ask; ask < $0.50; ask × 100 > budget; open interest < 100 (liquidity floor, all grades).
+  - Stale open interest (decided after a broker check: Alpaca's OI can lag a session, e.g. Monday still showing Thursday's). OI is stale when its date is older than the previous session (or missing). Then liquidity = the larger of OI and the previous session's contract volume (Alpaca daily bar volume, only from the bar dated the previous session). Liquidity is used for both the ≥ 100 floor and the grade C ≥ 1,000 check; fresh OI is used as is. The card shows the OI date, flagged "OI stale (Thu Oct 22)", and which number was used ("Liquidity: Fri volume 46,519, OI 5,429").
+  - While OI is stale, it is re-checked about hourly until Alpaca publishes the previous session's figures (otherwise once per ET day); date changes are logged.
   - Grades use |delta| (puts too), contiguous bands: A ≥ 0.57; B 0.30 to < 0.57; C 0.28 to < 0.30; rejected < 0.28 (this is the "far OTM" rule).
   - Grade C only when ALL hold: newest candle is a power candle (boom boom or three green soldiers for calls; red boom boom for puts), the pattern has already triggered ("price moving the right way"), and OI ≥ 1000.
   - Gain-at-target check: the estimated contract value at T1 (delta-gamma estimate minus 1 day of theta) must be greater than the ask. Reason: the method sells at the target, usually the same day, and never holds to expiration. Break-even at expiration is shown on the card as info only.

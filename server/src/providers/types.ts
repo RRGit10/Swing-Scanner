@@ -47,6 +47,9 @@ export interface OptionContract {
   /** ET date of the session dayLow/dayHigh/volume belong to (can lag on weekends/holidays) */
   dayBarDate: string | null;
   volume: number;
+  /** volume and ET date of the session before dayBar (Alpaca prevDailyBar) */
+  prevDayVolume: number | null;
+  prevDayBarDate: string | null;
   /** 0 when the source has no figure; see openInterestDate */
   openInterest: number;
   openInterestDate: string | null;
@@ -77,7 +80,8 @@ export interface CandleProvider {
 export interface OptionsProvider {
   /** YYYY-MM-DD dates, ascending */
   getExpirations(symbol: string): Promise<string[]>;
-  getChain(symbol: string, expiration: string): Promise<OptionContract[]>;
+  /** oiFreshAsOf: the previous session; open interest older than it is re-checked about hourly */
+  getChain(symbol: string, expiration: string, opts?: { oiFreshAsOf?: string | null }): Promise<OptionContract[]>;
   /** current snapshot of one contract by OCC symbol, or null if not listed */
   getContract(occSymbol: string): Promise<OptionContract | null>;
 }
